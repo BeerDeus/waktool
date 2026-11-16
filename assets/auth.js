@@ -95,6 +95,7 @@ onAuthStateChanged(auth, async u => {
     const merged = {
       levels: { ...(local.levels || {}), ...(remote.levels || {}) },
       prefs: { ...(local.prefs || {}), ...(remote.prefs || {}) },
+      progress: { ...(local.progress || {}), ...(remote.progress || {}) },
     };
     W.applyState(merged);
     const needPush = !snap.exists() ||
