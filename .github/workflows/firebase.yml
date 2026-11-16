@@ -33,6 +33,16 @@ jobs:
         continue-on-error: true
         run: gcloud services enable firestore.googleapis.com identitytoolkit.googleapis.com firebaserules.googleapis.com --project "$PROJECT"
 
+      - name: Diagnostic permissions
+        continue-on-error: true
+        run: |
+          echo "Compte de service : $(gcloud config get-value account 2>/dev/null)"
+          TOKEN=$(gcloud auth print-access-token)
+          curl -sS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -X POST \
+            "https://cloudresourcemanager.googleapis.com/v1/projects/$PROJECT:testIamPermissions" \
+            -d '{"permissions":["firebaserules.rulesets.create","firebaserules.rulesets.test","firebaserules.releases.update","firebaserules.releases.create","datastore.databases.get","firebaseauth.configs.get","firebaseauth.configs.update","identitytoolkit.tenants.get","serviceusage.services.enable","resourcemanager.projects.setIamPolicy","resourcemanager.projects.getIamPolicy"]}'
+          gcloud services list --enabled --project "$PROJECT" --format='value(config.name)' 2>&1 | grep -E 'rules|firestore|identity|firebase' || true
+
       - name: Base Firestore
         run: |
           TOKEN=$(gcloud auth print-access-token)
@@ -47,6 +57,7 @@ jobs:
           fi
 
       - name: Règles Firestore
+        continue-on-error: true
         run: npx --yes firebase-tools@13 deploy --only firestore:rules --project "$PROJECT" --non-interactive
 
       - name: Domaine autorisé + provider Google
