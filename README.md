@@ -19,3 +19,9 @@ python3 scripts/build_data.py $CACHE
 ```
 
 Sources : [MethodWakfu](https://methodwakfu.com/artisanat/localisation-des-ressources/), gamedata Ankama, [Wakfu Wiki](https://wakfu.wiki.gg). Images © Ankama.
+
+## Import des niveaux par capture
+
+Fenêtre Métiers en jeu (`J`) → capture → `Ctrl+V` sur le site (ou glisser-déposer / bouton « Importer une capture »).
+OCR 100 % local avec Tesseract.js (`vendor/tesseract/`, modèle `fra` compact) : 3 passes avec seuils différents + vote majoritaire ;
+les valeurs non unanimes sont signalées « ? » avant enregistrement.

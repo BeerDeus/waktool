@@ -65,6 +65,11 @@
       renderTabs();
       render();
     },
+    // modification par l'utilisateur (import) : applique et déclenche la sauvegarde
+    setLevels(levels) {
+      this.applyState({ levels });
+      changed();
+    },
     onChange(f) { listeners.push(f); },
   };
 

@@ -79,6 +79,39 @@ img { image-rendering: auto; }
 .sync.err { color: var(--ko); }
 .lnk { background: none; border: 0; color: var(--mut); cursor: pointer; font: inherit; text-decoration: underline; padding: 0; }
 @media (max-width: 700px) { .account { margin-left: 0; } }
+.gbtn.small { padding: 6px 12px; font-size: 13px; }
+
+/* import capture */
+dialog.imp {
+  width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
+  background: var(--card); color: var(--txt); border: 1px solid var(--line); border-radius: var(--r); padding: 18px;
+}
+dialog.imp::backdrop { background: rgb(0 0 0 / .55); }
+dialog.imp h3 { margin: 0 0 10px; }
+dialog.imp menu { display: flex; justify-content: flex-end; align-items: center; gap: 14px; margin: 16px 0 0; padding: 0; }
+dialog.imp kbd { background: var(--card2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+.imp-drop {
+  display: grid; place-items: center; text-align: center; min-height: 140px; cursor: pointer;
+  border: 2px dashed var(--line); border-radius: var(--r); color: var(--mut); padding: 16px;
+}
+.imp-drop.over, .imp-drop:hover { border-color: var(--acc); color: var(--txt); }
+.imp-body { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 560px) { .imp-body { grid-template-columns: 1fr; } .imp-shot { max-height: 200px; justify-self: center; } }
+.imp-shot { width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+.imp-status { margin: 0 0 8px; }
+.imp-res progress { width: 100%; }
+.imp-res table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.imp-res th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--mut); padding: 4px 6px; }
+.imp-res td { padding: 4px 6px; border-top: 1px solid var(--line); }
+.imp-res td img { width: 22px; height: 22px; vertical-align: middle; }
+.imp-res td.old { color: var(--mut); }
+.imp-res tr.miss td:first-child { color: var(--mut); }
+.imp-res input { width: 70px; background: var(--card2); border: 1px solid var(--line); color: var(--txt); border-radius: 6px; padding: 4px 6px; font: inherit; }
+.imp-res input.chg { border-color: var(--ok); }
+.imp-res input.unsure { border-color: var(--acc); }
+.imp-res .warn { color: var(--acc); font-weight: 800; margin-left: 4px; cursor: help; }
+.imp-res details { margin-top: 10px; font-size: 12px; color: var(--mut); }
+.imp-res pre { white-space: pre-wrap; background: var(--card2); padding: 8px; border-radius: 6px; }
 
 /* layout */
 .layout {
