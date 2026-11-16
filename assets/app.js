@@ -24,9 +24,49 @@
   });
 
   const q = $('#q'), lvl = $('#lvl'), only = $('#only');
-  const lvlKey = () => 'lvl.' + cur;
-  [q, only].forEach(el => el.addEventListener('input', renderList));
-  lvl.addEventListener('input', () => { store.set(lvlKey(), lvl.value); renderList(); renderSide(); });
+  const lvlKey = k => 'lvl.' + (k || cur);
+  const listeners = [];
+  const changed = () => listeners.forEach(f => f());
+  only.checked = store.get('only') === '1';
+  q.addEventListener('input', renderList);
+  only.addEventListener('input', () => { store.set('only', only.checked ? '1' : '0'); renderList(); changed(); });
+  lvl.addEventListener('input', () => { store.set(lvlKey(), lvl.value); renderList(); renderSide(); renderTabs(); changed(); });
+
+  function renderTabs() {
+    tabs.querySelectorAll('.tab').forEach(b => {
+      const v = store.get(lvlKey(b.dataset.k));
+      let s = b.querySelector('.tlvl');
+      if (!s) { s = document.createElement('span'); s.className = 'tlvl'; b.append(s); }
+      s.textContent = v || '';
+      s.hidden = !v;
+    });
+  }
+
+  // API utilisée par auth.js (sync Firestore)
+  window.waktool = {
+    getState() {
+      const levels = {};
+      D.jobs.forEach(j => {
+        const v = store.get(lvlKey(j.key));
+        if (v !== null && v !== '') levels[j.key] = +v;
+      });
+      return { levels, prefs: { only: only.checked } };
+    },
+    applyState(s) {
+      D.jobs.forEach(j => {
+        const v = s.levels && s.levels[j.key];
+        if (v !== undefined && v !== null) store.set(lvlKey(j.key), String(v));
+      });
+      if (s.prefs && typeof s.prefs.only === 'boolean') {
+        only.checked = s.prefs.only;
+        store.set('only', only.checked ? '1' : '0');
+      }
+      lvl.value = store.get(lvlKey()) || '';
+      renderTabs();
+      render();
+    },
+    onChange(f) { listeners.push(f); },
+  };
 
   const icon = (it, cls = '') => it.icon
     ? `<img src="${it.icon}" alt="" loading="lazy" class="${cls}" title="${esc(it.name)}">`
@@ -132,5 +172,6 @@
     const k = location.hash.slice(1);
     if (k && k !== cur && D.jobs.some(j => j.key === k)) select(k);
   });
+  renderTabs();
   select(cur);
 })();

@@ -1,0 +1,74 @@
+name: Firebase setup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - firestore.rules
+      - firebase.json
+      - .github/workflows/firebase.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: wakfu-tool
+  SITE_DOMAIN: wakfu.manaorbit.app
+  DB_LOCATION: eur3
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Activer les APIs
+        continue-on-error: true
+        run: gcloud services enable firestore.googleapis.com identitytoolkit.googleapis.com firebaserules.googleapis.com --project "$PROJECT"
+
+      - name: Base Firestore
+        run: |
+          TOKEN=$(gcloud auth print-access-token)
+          H=(-H "Authorization: Bearer $TOKEN" -H "x-goog-user-project: $PROJECT" -H "Content-Type: application/json")
+          URL="https://firestore.googleapis.com/v1/projects/$PROJECT/databases"
+          code=$(curl -s -o db.json -w '%{http_code}' "${H[@]}" "$URL/(default)")
+          echo "GET (default) -> $code"; cat db.json; echo
+          if [ "$code" = "404" ]; then
+            curl -sS --fail-with-body "${H[@]}" -X POST "$URL?databaseId=(default)" \
+              -d "{\"locationId\":\"$DB_LOCATION\",\"type\":\"FIRESTORE_NATIVE\"}"
+            echo; echo "Base créée ($DB_LOCATION)"; sleep 30
+          fi
+
+      - name: Règles Firestore
+        run: npx --yes firebase-tools@13 deploy --only firestore:rules --project "$PROJECT" --non-interactive
+
+      - name: Domaine autorisé + provider Google
+        run: |
+          TOKEN=$(gcloud auth print-access-token)
+          H=(-H "Authorization: Bearer $TOKEN" -H "x-goog-user-project: $PROJECT" -H "Content-Type: application/json")
+          CFG="https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/config"
+          curl -sS --fail-with-body "${H[@]}" "$CFG" > cfg.json
+          python3 - <<'PY' > patch.json
+          import json, os
+          d = json.load(open('cfg.json'))
+          doms = d.get('authorizedDomains', [])
+          print('domaines actuels:', doms, file=__import__('sys').stderr)
+          if os.environ['SITE_DOMAIN'] not in doms:
+              doms.append(os.environ['SITE_DOMAIN'])
+          print(json.dumps({'authorizedDomains': doms}))
+          PY
+          curl -sS --fail-with-body "${H[@]}" -X PATCH "$CFG?updateMask=authorizedDomains" -d @patch.json | python3 -c "import json,sys;print('authorizedDomains =', json.load(sys.stdin).get('authorizedDomains'))"
+          IDP="https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT/defaultSupportedIdpConfigs/google.com"
+          code=$(curl -s -o idp.json -w '%{http_code}' "${H[@]}" "$IDP")
+          echo "Provider google.com -> HTTP $code"
+          python3 -c "import json;d=json.load(open('idp.json'));print('enabled =', d.get('enabled'), '| clientId =', d.get('clientId'))" || cat idp.json
+          if [ "$code" = "200" ] && ! grep -q '"enabled": true' idp.json; then
+            curl -sS --fail-with-body "${H[@]}" -X PATCH "$IDP?updateMask=enabled" -d '{"enabled":true}' && echo "Provider Google activé"
+          fi

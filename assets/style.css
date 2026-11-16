@@ -60,6 +60,26 @@ img { image-rendering: auto; }
 .tab img { width: 26px; height: 26px; }
 .tab[aria-selected="true"] { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); background: var(--card2); }
 
+.tlvl {
+  font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 999px;
+  background: var(--card2); border: 1px solid var(--line); color: var(--mut);
+}
+.tab[aria-selected="true"] .tlvl { color: var(--txt); }
+
+/* compte */
+.account { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.gbtn {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font: inherit; font-weight: 600;
+  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--txt);
+}
+.gbtn:hover { border-color: var(--mut); }
+.who { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.who img { width: 26px; height: 26px; border-radius: 50%; }
+.sync { color: var(--ok); font-size: 12px; }
+.sync.err { color: var(--ko); }
+.lnk { background: none; border: 0; color: var(--mut); cursor: pointer; font: inherit; text-decoration: underline; padding: 0; }
+@media (max-width: 700px) { .account { margin-left: 0; } }
+
 /* layout */
 .layout {
   max-width: 1280px; margin: 0 auto; padding: 16px;
