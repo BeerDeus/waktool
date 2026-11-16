@@ -114,11 +114,13 @@
     const bmp = await createImageBitmap(blob);
     const w = await getWorker(onProgress);
     const votes = {};
-    const passes = [];
+    const passes = [], wordsPasses = [];
     let text = '';
     for (const [i, pass] of PASSES.entries()) {
       const { data } = await w.recognize(await preprocess(bmp, pass));
       let lines = (data.lines || []).map(l => l.text.trim()).filter(Boolean);
+      // mots avec position (x en px de l'image prétraitée) pour lire les colonnes (HDV)
+      wordsPasses.push((data.lines || []).map(l => (l.words || []).map(wd => ({ t: wd.text, x0: wd.bbox.x0, x1: wd.bbox.x1, y0: wd.bbox.y0, y1: wd.bbox.y1 }))));
       if (!lines.length) lines = data.text.split('\n');
       if (!text) text = lines.join('\n');
       passes.push(lines);
@@ -132,48 +134,124 @@
       levels[k] = best;
       if (n < PASSES.length) unsure.push(k);
     }
-    return { levels, unsure, text, passes };
+    const scale = Math.max(1, Math.min(4, 1400 / Math.max(bmp.width, bmp.height)));
+    return { levels, unsure, text, passes, wordsPasses, bmp, scale };
   }
 
   // ---------------------------------------------------------------- prix HDV
-  // nombres « 12 345 », « 1.234.567 », « 850 » ; le prix retenu est le plus grand nombre de la ligne
-  const NUM = /\d{1,3}(?:[ .,\u00a0\u202f]\d{3})+|\d+/g;
+  // Lecture par colonnes : le prix est le nombre sous l'en-tête « Prix » (sinon le nombre le plus à droite),
+  // chaque case de prix est relue agrandie en chiffres seuls, puis vote entre toutes les lectures.
   const clean = s => norm(s).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
-  async function parsePrices(passes) {
+  const isNum = t => /^\d[\d .,]*[^\w]?$/.test(t.trim()); // « 735 », « 7792 », « 165* » ; pas « E3 »
+  const digits = t => t.replace(/\D/g, '');
+
+  async function readCell(bmp, sc, box, thr) {
+    const pad = 5 * sc, padR = 1.5 * sc; // peu de marge à droite : le symbole ₭ suit le nombre
+    const sx = Math.max(0, (box.x0 - pad) / sc), sy = Math.max(0, (box.y0 - pad) / sc);
+    const sw = Math.min(bmp.width - sx, (box.x1 - box.x0 + pad + padR) / sc), sh = Math.min(bmp.height - sy, (box.y1 - box.y0 + 2 * pad) / sc);
+    const k = 70 / sh;
+    const c = document.createElement('canvas');
+    c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.imageSmoothingQuality = 'high';
+    x.drawImage(bmp, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    const img = x.getImageData(0, 0, c.width, c.height), p = img.data;
+    let sum = 0;
+    for (let i = 0; i < p.length; i += 4) sum += p[i] + p[i + 1] + p[i + 2];
+    const dark = sum / (p.length / 4) / 3 < 128;
+    for (let i = 0; i < p.length; i += 4) {
+      let g = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+      if (dark) g = 255 - g;
+      if (thr) g = g < thr ? 0 : 255;
+      p[i] = p[i + 1] = p[i + 2] = g;
+    }
+    x.putImageData(img, 0, 0);
+    const w = await getWorker();
+    await w.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: '7' });
+    try {
+      const { data } = await w.recognize(c);
+      return digits(data.text);
+    } finally {
+      await w.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '6' });
+    }
+  }
+
+  function matchItem(items, text) {
+    if (text.length < 3) return null;
+    let best = null;
+    for (const it of items) if (text.includes(it.n) && (!best || it.n.length > best.n.length)) best = it;
+    if (best) return best;
+    let bd = Infinity;
+    for (const it of items) {
+      if (Math.abs(it.n.length - text.length) > 3) continue;
+      const d = lev(text, it.n);
+      if (d <= Math.max(1, Math.floor(it.n.length / 6)) && d < bd) { bd = d; best = it; }
+    }
+    return best;
+  }
+
+  async function parsePrices(res, onStep) {
     const items = (await W.allItems()).map(it => ({ ...it, n: clean(it.name) })).filter(it => it.n.length >= 3);
-    const votes = new Map();
-    const vote = (it, p) => { if (!votes.has(it.id)) votes.set(it.id, { it, ps: [] }); votes.get(it.id).ps.push(p); };
-    for (const lines of passes) {
+    // colonne « Prix » (centre x), tolérance = 12 % de la largeur de l'image prétraitée
+    let px = null;
+    res.wordsPasses.forEach(ps => ps.forEach(l => l.forEach(w => { if (clean(w.t) === 'prix') px = (w.x0 + w.x1) / 2; })));
+    const tol = 0.12 * res.bmp.width * res.scale;
+    const found = new Map(); // id -> { it, reads: [], box }
+    for (const ps of res.wordsPasses) {
       let pending = null;
-      for (const raw of lines) {
-        const nums = [...raw.matchAll(NUM)].map(m => +m[0].replace(/\D/g, '')).filter(n => n > 0);
-        const text = clean(raw.replace(NUM, ' '));
-        let best = null;
-        if (text.length >= 3) {
-          for (const it of items) if (text.includes(it.n) && (!best || it.n.length > best.n.length)) best = it;
-          if (!best) {
-            let bd = Infinity;
-            for (const it of items) {
-              if (Math.abs(it.n.length - text.length) > 3) continue;
-              const d = lev(text, it.n);
-              if (d <= Math.max(1, Math.floor(it.n.length / 6)) && d < bd) { bd = d; best = it; }
-            }
-          }
+      for (const l of ps) {
+        // nombres, en recollant « 15 » + « 600 » quand l'écart est petit (séparateur de milliers)
+        const nums = [];
+        for (const w of l) {
+          if (!isNum(w.t) || !digits(w.t)) continue;
+          const prev = nums[nums.length - 1];
+          if (prev && digits(w.t).length === 3 && w.x0 - prev.x1 < 0.8 * (w.y1 - w.y0) && l.indexOf(w) === l.indexOf(prev.last) + 1) {
+            nums[nums.length - 1] = { ...prev, t: digits(prev.t) + digits(w.t), x1: w.x1, last: w };
+          } else nums.push({ ...w, last: w });
         }
-        if (best) {
-          if (nums.length) { vote(best, Math.max(...nums)); pending = null; } else pending = best;
-        } else if (pending && nums.length) { vote(pending, Math.max(...nums)); pending = null; }
+        const text = clean(l.filter(w => !isNum(w.t)).map(w => w.t).join(' '));
+        let pw = null;
+        if (nums.length) {
+          pw = px === null ? nums[nums.length - 1]
+            : nums.reduce((a, b) => (Math.abs((b.x0 + b.x1) / 2 - px) < Math.abs((a.x0 + a.x1) / 2 - px) ? b : a));
+          if (px !== null && Math.abs((pw.x0 + pw.x1) / 2 - px) > tol) pw = null;
+        }
+        const it = matchItem(items, text) || (pw ? pending : null);
+        if (!it) continue;
+        if (!pw) { pending = it; continue; }
+        pending = null;
+        if (!found.has(it.id)) found.set(it.id, { it, reads: [], box: null });
+        const f = found.get(it.id);
+        f.reads.push(+digits(pw.t));
+        // case à relire : partie chiffres du mot (sans le symbole ₭ éventuel)
+        const frac = digits(pw.t).length / pw.t.replace(/\s/g, '').length;
+        f.box ||= { x0: pw.x0, x1: pw.x0 + (pw.x1 - pw.x0) * frac, y0: pw.y0, y1: pw.y1, n: digits(pw.t).length };
       }
     }
-    return [...votes.values()].map(({ it, ps }) => {
-      const c = ps.reduce((m, p) => m.set(p, (m.get(p) || 0) + 1), new Map());
-      const [p, n] = [...c.entries()].sort((a, b) => b[1] - a[1])[0];
-      return { it, price: p, unsure: n < passes.length };
-    });
+    // case trop large (symbole ₭ collé au nombre) : largeur ramenée à nb de chiffres × largeur médiane d'un chiffre
+    const dws = [...found.values()].map(f => (f.box.x1 - f.box.x0) / f.box.n).sort((a, b) => a - b);
+    const dw = dws[Math.floor(dws.length / 2)];
+    found.forEach(f => { if (f.box.x1 - f.box.x0 > f.box.n * dw * 1.3) f.box.x1 = f.box.x0 + f.box.n * dw * 1.12; });
+    let i = 0;
+    for (const f of found.values()) {
+      onStep && onStep(++i / found.size);
+      for (const thr of [0, 140]) {
+        const v = await readCell(res.bmp, res.scale, f.box, thr);
+        if (v) f.reads.push(+v, +v); // relecture ciblée : poids double
+      }
+    }
+    if (window.WAKTOOL_DEBUG) console.log([...found.values()].map(f => f.it.name + ': ' + f.reads.join(',')).join('\n'));
+    return [...found.values()].map(({ it, reads }) => {
+      const c = reads.filter(n => n > 0).reduce((m, p) => m.set(p, (m.get(p) || 0) + 1), new Map());
+      const sorted = [...c.entries()].sort((a, b) => b[1] - a[1]);
+      if (!sorted.length) return null;
+      return { it, price: sorted[0][0], unsure: sorted.length > 1 && sorted[1][1] >= sorted[0][1] / 2 };
+    }).filter(Boolean);
   }
 
   async function showPrices(res, url) {
-    const found = await parsePrices(res.passes);
+    const status = dlg.querySelector('.imp-status');
+    const found = await parsePrices(res, p => { if (status) status.textContent = `Lecture des prix… ${Math.round(p * 100)} %`; });
     const rows = found.map(f => {
       const old = W.price(f.it.id);
       return `<tr><td><label><input type="checkbox" data-pid="${f.it.id}" checked></label></td>
