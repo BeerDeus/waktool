@@ -48,7 +48,7 @@
     get(k, d) { try { return { ...d, ...(JSON.parse(store.get(k)) || {}) }; } catch { return { ...d }; } },
     set(k, v) { store.set(k, JSON.stringify(v)); },
   };
-  const G_DEF = { region: null, havre: false, stasis: 0, turbo: false, xpExtra: 0, speed: 0,
+  const G_DEF = { region: null, temp: null, climMalus: 50, havre: false, stasis: 0, turbo: false, xpExtra: 0, speed: 0,
     sceau: false, potion: false, pacte: 0, mdc: 0, captchat: 0, qtyExtra: 0 };
   const J_DEF = { tool: 'auto', pet: '', petLvl: 50, conso: false, casque: false, sacs: 0, gateau: false };
   const REGION = [
@@ -66,7 +66,15 @@
   }
   const bonusPct = bonusXp;
   const speedMult = () => 1 + (+bg().speed || 0) / 100;
-  const dur = (job, diff) => XP.duration(job, diff) / speedMult();
+  // météo : hors de la plage de température idéale de la plante, les actions sont ralenties
+  // (Paysan / Forestier / Herboriste uniquement ; ampleur du ralentissement réglable, non publiée)
+  function climate(r) {
+    const t = bg().temp;
+    if (!r || !r.temp || t === null || t === '' || isNaN(+t)) return null;
+    return +t < r.temp[0] ? 'cold' : +t > r.temp[1] ? 'hot' : 'ok';
+  }
+  const climK = r => (['hot', 'cold'].includes(climate(r)) ? 1 + (+bg().climMalus || 0) / 100 : 1);
+  const dur = (job, diff, r) => XP.duration(job, diff) * climK(r) / speedMult();
 
   function activeTool(j, b, my) {
     if (b.tool === 'none') return null;
@@ -235,6 +243,11 @@
       const app = r.appearance || (r.normal && r.normal[0] && r.normal[0].icon) || (r.seed && r.seed[0] && r.seed[0].icon);
       $('.res-app', n).innerHTML = app ? `<img src="${app}" alt="${esc(r.name)}" loading="lazy">` : '';
       $('h3', n).innerHTML = esc(r.name) + (r.family_en && r.family_en !== r.name ? ` <span class="en-name">${esc(r.family_en)}</span>` : '');
+      const cl = climate(r);
+      if (r.temp) {
+        const lbl = { ok: 'température idéale', hot: 'trop chaud : actions ralenties', cold: 'trop froid : actions ralenties' }[cl] || 'plage de température idéale';
+        $('h3', n).insertAdjacentHTML('beforeend', ` <span class="temp ${cl || ''}" title="${lbl}">${cl === 'hot' ? '▲' : cl === 'cold' ? '▼' : '●'} ${r.temp[0]} à ${r.temp[1]} °C</span>`);
+      }
       $('.zones', n).innerHTML = (r.zones || []).map(z => `<li>${esc(z)}</li>`).join('') +
         (r.zones_en || []).map(z => `<li class="en" title="Nom anglais (wiki), zone récente">${esc(z)} (EN)</li>`).join('') +
         (r.hint ? `<li class="en">${esc(r.hint)}</li>` : '');
@@ -249,7 +262,7 @@
         const x = document.createElement('div');
         x.className = 'xpline ' + cls;
         x.innerHTML = m === 0 ? 'Plus d’XP (20 niveaux d’écart ou plus)'
-          : `<b>${fmt(per)} XP</b> / action${m < 1 ? ` (${(m * 100).toLocaleString('fr-FR')} %)` : ''} · ${sec(dur(j.key, my - r.level))} s` +
+          : `<b>${fmt(per)} XP</b> / action${m < 1 ? ` (${(m * 100).toLocaleString('fr-FR')} %)` : ''} · ${sec(dur(j.key, my - r.level, r))} s` +
             ` · <span title="Actions pour atteindre le niveau ${my + 1}">${fmt(nb)} actions → niv. ${my + 1}</span>`;
         $('.res-body', n).append(x);
       }
@@ -264,7 +277,7 @@
     const ok = j.resources.filter(r => r.level <= L);
     if (!ok.length) return null;
     return ok.reduce((b, r) => {
-      const m = XP.mult(L - r.level), d = dur(j.key, L - r.level);
+      const m = XP.mult(L - r.level), d = dur(j.key, L - r.level, r);
       const rate = m / d;
       return !b || rate > b.rate ? { r, m, d, rate } : b;
     }, null);
@@ -337,6 +350,15 @@
           </button>`).join('')}
         </div>
       </div>
+      <div class="bgrp"><h5>Météo <small>(température de la zone, touche X en jeu)</small></h5>
+        ${j.resources.some(r => r.temp) ? `
+        <label class="bchk">Température <input type="number" data-b="g:temp" value="${g.temp ?? ''}" placeholder="—" min="-40" max="60"> °C
+          ${g.temp !== null && g.temp !== '' ? climCount(j, my) : ''}</label>
+        <label class="bchk">Ralentissement hors plage <input type="number" data-b="g:climMalus" value="${+g.climMalus || 0}" min="0" max="300"> %
+          <em class="warn-txt" title="Valeur non publiée par Ankama : à ajuster selon tes mesures en jeu">estimation</em></label>`
+        : '<p class="meta">La météo n’a pas d’effet sur ce métier.</p>'}
+      </div>
+      <details class="bmore" ${store.get('ui.bmore') === '0' ? '' : 'open'}><summary>Équipement, consommables et autres bonus</summary>
       <div class="bgrp"><h5>Autres bonus d’XP</h5>
         ${chk('havre', g.havre, 'Havre-Monde', ' <em>+10 %</em>')}
         <label class="bchk">Source de Stasis ${sel('stasis', g.stasis, [[0, 'non'], [10, '+10 %'], [20, '+20 %']])}</label>
@@ -362,9 +384,17 @@
         <label class="bchk">Potion ${sel('g:speed', g.speed, [[0, 'aucune'], [50, 'Récolteur Véloce +50 %'], [100, 'Artipotion Exceptionnelle +100 %']])}</label>
       </div>
       ${parts.length ? `<details class="meta"><summary>Détail quantité</summary>${parts.map(([n, v]) => `${esc(n)} : ${v > 0 ? '+' : ''}${v} %`).join('<br>')}</details>` : ''}
+      </details>
       <p class="meta">Les bonus d’une même catégorie s’additionnent. Turbo Craft et les potions de vitesse ne se cumulent pas.
         ${+g.pacte ? '<br>Pacte : une partie des récoltes part dans l’inventaire PvP.' : ''}
         ${best ? '<br>* En boucle sur ' + esc(best.r.name) + ', sans déplacements.' : ''}</p>`;
+  }
+
+  function climCount(j, my) {
+    const rs = j.resources.filter(r => r.temp && (my === null || r.level <= my));
+    const c = { ok: 0, hot: 0, cold: 0 };
+    rs.forEach(r => c[climate(r)]++);
+    return `<span class="ccount"><span class="temp ok">● ${c.ok}</span> <span class="temp hot">▲ ${c.hot}</span> <span class="temp cold">▼ ${c.cold}</span></span>`;
   }
 
   // les clés globales sont préfixées par « g: » ou listées ici
@@ -376,6 +406,9 @@
       $('#prog-out').innerHTML = progHtml(j, myLevel());
       renderList(); changed();
     };
+    box.addEventListener('toggle', e => {
+      if (e.target.matches('details.bmore')) store.set('ui.bmore', e.target.open ? '1' : '0');
+    }, true);
     box.addEventListener('click', e => {
       const r = e.target.closest('[data-region]');
       if (!r) return;
@@ -392,6 +425,7 @@
       const val = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' && !isNaN(+el.value) && el.value !== '' ? +el.value : (el.type === 'number' ? +el.value || 0 : el.value));
       if (global) {
         const g = bg(); g[key] = val;
+        if (key === 'temp') g.temp = el.value === '' ? null : +el.value;
         if (key === 'turbo' && val) g.speed = 0;      // non cumulables
         if (key === 'speed' && val) g.turbo = false;
         sj.set('bonus.global', g);
@@ -426,28 +460,38 @@
         <div class="meta">${esc(e.kind)} · ${esc(e.how)}</div></div>
       </div>`).join('');
     $('#side').innerHTML = `
-      <div class="box" id="prog"><h4>Progression ${esc(j.label)}</h4>
+      <div class="box" id="prog" data-box="prog"><h4>Progression ${esc(j.label)}</h4>
         <div class="pin">
           <label>XP actuelle<input id="p-xp" type="number" min="0" value="${esc(store.get('xp.' + j.key) || '')}" placeholder="0"></label>
           <label>Objectif niv.<input id="p-tg" type="number" min="1" max="250" value="${esc(store.get('target.' + j.key) || '')}" placeholder="auto"></label>
         </div>
         <div id="prog-out">${progHtml(j, my)}</div>
       </div>
-      <div class="box" id="bonus"><h4>Bonus actifs</h4><div id="bonus-body">${bonusHtml(j)}</div></div>
-      <div class="box"><h4>Outils ${esc(j.label)}</h4>${tools}
+      <div class="box" id="bonus" data-box="bonus"><h4>Bonus actifs</h4><div id="bonus-body">${bonusHtml(j)}</div></div>
+      <div class="box" data-box="tools"><h4>Outils ${esc(j.label)}</h4>${tools}
         <p class="meta" style="margin:10px 0 0">Le niveau indiqué est celui de la recette (craft par le ${esc(j.label)}).</p></div>
-      <div class="box"><h4>Familier</h4>
+      <div class="box" data-box="pet"><h4>Familier</h4>
         <div class="it">${icon(p)}<div><b>${esc(p.name)}</b>
           <span class="bonus">+${p.bonus_min} % → +${p.bonus_max} % quantité récoltée</span>
           <div class="meta">Niv. 1 → 50 · obtenu dans les ${esc(p.how)}</div></div></div></div>
-      <div class="box"><h4>Consommable</h4>
+      <div class="box" data-box="conso"><h4>Consommable</h4>
         <div class="it">${icon(c)}<div><b>${esc(c.name)} <span class="badge">niv. ${c.level}</span></b>
           <span class="bonus">${esc(c.bonus)} · ${esc(c.duration)}</span>
           <div class="meta">${esc(c.how)}</div>${recipeHtml(c.recipe)}</div></div></div>
-      ${extras ? `<div class="box"><h4>Équipement bonus</h4>${extras}</div>` : ''}
-      <div class="box"><h4>Bonus tous métiers</h4>${common}</div>`;
+      ${extras ? `<div class="box" data-box="extras"><h4>Équipement bonus</h4>${extras}</div>` : ''}
+      <div class="box" data-box="common"><h4>Bonus tous métiers</h4>${common}</div>`;
     bindProg(j, my);
     bindBonus(j);
+    // blocs repliables (clic sur le titre), état mémorisé
+    $('#side').querySelectorAll('.box[data-box]').forEach(box => {
+      const k = 'ui.box.' + box.dataset.box;
+      box.classList.toggle('collapsed', store.get(k) === '0');
+      const h = box.querySelector('h4');
+      h.setAttribute('role', 'button'); h.tabIndex = 0;
+      const tg = () => { box.classList.toggle('collapsed'); store.set(k, box.classList.contains('collapsed') ? '0' : '1'); };
+      h.onclick = tg;
+      h.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tg(); } };
+    });
   }
 
   window.addEventListener('hashchange', () => {

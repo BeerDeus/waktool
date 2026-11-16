@@ -75,6 +75,9 @@ JOBS = [
 ]
 SKILL_TO_JOB = {j[1]: j[0] for j in JOBS}
 
+# métiers sensibles à la météo (température -> durée des actions, humidité -> plantation)
+CLIMATE_SKILLS = {64, 71, 72}
+
 # ressources d'évènement / test à ignorer
 IGNORED_RES = {802, 826, 824, 856, 717, 825, 855, 834, 833, 643}
 
@@ -164,7 +167,9 @@ def harvest_resources(skill):
                 rare.append(item_ref(it))
             else:
                 normal.append(item_ref(it))
+        rd = resources[rid]['definition']
         out.setdefault(lvl, []).append(dict(
+            temp=[rd['idealTemperatureRangeMin'], rd['idealTemperatureRangeMax']], rain=rd.get('idealRain'),
             rid=rid, name=resources[rid]['title']['fr'], en=resources[rid]['title']['en'],
             level=lvl, normal=normal, rare=rare, seed=seed))
     return out
@@ -190,6 +195,8 @@ def build_harvest(job):
         if g:
             used.add(g['rid'])
             row.update(normal=g['normal'], rare=g['rare'], seed=g['seed'])
+            if skill in CLIMATE_SKILLS:
+                row.update(temp=g['temp'], rain=g['rain'])
         rows.append(row)
     # ressources récentes (gamedata) absentes de methodwakfu
     wiki = {}
@@ -213,6 +220,8 @@ def build_harvest(job):
                        zones_en=zones_en, source='wiki', normal=g['normal'], rare=g['rare'], seed=g['seed'])
             if app:
                 row['appearance'] = app
+            if skill in CLIMATE_SKILLS:
+                row.update(temp=g['temp'], rain=g['rain'])
             rows.append(row)
     rows.sort(key=lambda r: r['level'])
     return rows

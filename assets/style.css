@@ -240,3 +240,21 @@ details.recipe summary { cursor: pointer; color: var(--mut); }
 .bchk input[type=number] { width: 60px; }
 #bonus details { margin-top: 8px; }
 .pin { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* météo */
+.temp { font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--card2); border: 1px solid var(--line); color: var(--mut); white-space: nowrap; }
+.temp.ok { color: #3f9d58; border-color: #3f9d58; }
+.temp.hot { color: #d9534f; border-color: #d9534f; }
+.temp.cold { color: #3b8fd9; border-color: #3b8fd9; }
+.ccount { display: inline-flex; gap: 4px; }
+.warn-txt { color: var(--acc) !important; cursor: help; }
+details.bmore { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+details.bmore > summary { cursor: pointer; font-weight: 600; font-size: 12.5px; color: var(--mut); }
+details.bmore[open] > summary { margin-bottom: 2px; }
+
+/* blocs repliables */
+.box[data-box] > h4 { cursor: pointer; user-select: none; display: flex; align-items: center; justify-content: space-between; }
+.box[data-box] > h4::after { content: '▾'; font-size: 13px; transition: transform .15s; }
+.box[data-box].collapsed > h4 { margin-bottom: 0; }
+.box[data-box].collapsed > h4::after { transform: rotate(-90deg); }
+.box[data-box].collapsed > :not(h4) { display: none; }
