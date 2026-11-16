@@ -1,6 +1,6 @@
 // Service worker Waktool : code/données en « réseau d'abord » (toujours à jour, cache si hors ligne),
 // images et moteur OCR en « cache d'abord ». Les services Google/Firebase ne sont jamais mis en cache.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CORE = `waktool-core-${VERSION}`;
 const STATIC = `waktool-static-${VERSION}`;
 const PRECACHE = ['./', 'index.html', 'manifest.webmanifest', 'img/app/icon-192.png', 'img/app/icon-512.png'];
@@ -36,7 +36,10 @@ self.addEventListener('fetch', e => {
 
   // réseau d'abord, repli sur le cache (hors ligne)
   e.respondWith(fetch(req).then(res => {
-    if (res.ok) caches.open(CORE).then(c => c.put(req, res.clone()));
+    if (res.ok) {
+      const copy = res.clone(); // à cloner tout de suite : la page va consommer la réponse
+      e.waitUntil(caches.open(CORE).then(c => c.put(req, copy)));
+    }
     return res;
   }).catch(async () => (await caches.match(req, { ignoreSearch: req.mode === 'navigate' })) ||
     (req.mode === 'navigate' ? caches.match('index.html') : Response.error())));
