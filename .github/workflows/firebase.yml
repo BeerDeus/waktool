@@ -45,17 +45,22 @@ jobs:
       - name: Règles Firestore
         run: |
           TOKEN=$(gcloud auth print-access-token)
-          H=(-H "Authorization: Bearer $TOKEN" -H "x-goog-user-project: $PROJECT" -H "Content-Type: application/json")
+          H=(-H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json")
           API="https://firebaserules.googleapis.com/v1/projects/$PROJECT"
           python3 -c "import json;print(json.dumps({'source':{'files':[{'name':'firestore.rules','content':open('firestore.rules').read()}]}}))" > ruleset.json
-          curl -sS --fail-with-body "${H[@]}" -X POST "$API/rulesets" -d @ruleset.json > created.json
+          code=$(curl -sS -o created.json -w '%{http_code}' "${H[@]}" -X POST "$API/rulesets" -d @ruleset.json)
+          echo "POST rulesets -> $code"; cat created.json; echo
+          [ "$code" = "200" ] || exit 1
           RS=$(python3 -c "import json;print(json.load(open('created.json'))['name'])")
-          echo "Ruleset créé : $RS"
           REL="projects/$PROJECT/releases/cloud.firestore"
-          curl -sS --fail-with-body "${H[@]}" -X PATCH "$API/releases/cloud.firestore" \
-            -d "{\"release\":{\"name\":\"$REL\",\"rulesetName\":\"$RS\"}}" \
-            || curl -sS --fail-with-body "${H[@]}" -X POST "$API/releases" -d "{\"name\":\"$REL\",\"rulesetName\":\"$RS\"}"
-          echo; echo "Règles publiées"
+          code=$(curl -sS -o rel.json -w '%{http_code}' "${H[@]}" -X PATCH "$API/releases/cloud.firestore" \
+            -d "{\"release\":{\"name\":\"$REL\",\"rulesetName\":\"$RS\"}}")
+          echo "PATCH release -> $code"; cat rel.json; echo
+          if [ "$code" = "404" ]; then
+            code=$(curl -sS -o rel.json -w '%{http_code}' "${H[@]}" -X POST "$API/releases" -d "{\"name\":\"$REL\",\"rulesetName\":\"$RS\"}")
+            echo "POST release -> $code"; cat rel.json; echo
+          fi
+          [ "$code" = "200" ]
 
       - name: Domaine autorisé + provider Google
         run: |
