@@ -1,6 +1,7 @@
+AddType application/manifest+json .webmanifest
 # HTML/JS/CSS/données : toujours revalider (les URLs sont versionnées via ?v=)
 <IfModule mod_headers.c>
-  <FilesMatch "\.(html|js|css|json)$">
+  <FilesMatch "\.(html|js|css|json|webmanifest)$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
   <FilesMatch "\.(png|jpe?g|gif|svg|webp|gz|wasm)$">

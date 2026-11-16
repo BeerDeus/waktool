@@ -28,6 +28,21 @@
     store.set('theme', t); applyTheme(t); changed();
   });
 
+  // ---------------------------------------------------------------- PWA (installation + hors ligne)
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+  let installEvt = null;
+  const installBtn = $('#install-btn');
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; installBtn.hidden = false; });
+  window.addEventListener('appinstalled', () => { installBtn.hidden = true; installEvt = null; });
+  installBtn.addEventListener('click', async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    await installEvt.userChoice;
+    installEvt = null; installBtn.hidden = true;
+  });
+
   // ---------------------------------------------------------------- XP métiers
   // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
   // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
