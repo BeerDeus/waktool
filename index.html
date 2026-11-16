@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Waktool · Métiers de récolte</title>
-  <meta name="description" content="Wakfu : zones de récolte, niveaux, outils, familiers et consommables pour chaque métier de récolte.">
+  <title>Waktool · Métiers Wakfu</title>
+  <meta name="description" content="Wakfu : ressources, zones, XP, plans de montée, recettes, rentabilité et sessions de farm pour chaque métier.">
   <link rel="icon" href="img/app/favicon-32.png" sizes="32x32">
   <link rel="apple-touch-icon" href="img/app/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -15,7 +15,7 @@
     // thème appliqué avant le rendu (évite le flash)
     try { const t = localStorage.getItem('waktool.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
-  <link rel="stylesheet" href="assets/style.css?v=6181f99c">
+  <link rel="stylesheet" href="assets/style.css?v=b10601e4">
 </head>
 <body>
   <header class="top">
@@ -23,38 +23,52 @@
       <span class="logo">W</span>
       <div>
         <h1>Waktool</h1>
-        <p>Métiers de récolte Wakfu</p>
+        <p>Métiers Wakfu</p>
       </div>
     </div>
+    <nav class="mainnav" id="mainnav" aria-label="Sections">
+      <button type="button" data-page="metiers"><span aria-hidden="true">📚</span> Métiers</button>
+      <button type="button" data-page="rentabilite"><span aria-hidden="true">💰</span> Rentabilité</button>
+      <button type="button" data-page="session"><span aria-hidden="true">⏱</span> Session<span class="live-dot" id="live-dot" hidden></span></button>
+    </nav>
+    <div class="hright">
+      <div id="account" class="account"></div>
+      <button id="install-btn" class="gbtn small" type="button" hidden title="Installer Waktool comme une application">⤓ Installer</button>
+      <button id="theme-btn" class="theme-btn" type="button"></button>
+    </div>
+  </header>
+
+  <div class="jobbar" id="jobbar">
     <nav id="tabs" class="tabs" role="tablist"></nav>
     <div id="crafts-dd" class="crafts-dd">
       <button id="dd-btn" class="dd-btn" type="button" aria-haspopup="true" aria-expanded="false">Artisanat ▾</button>
       <div id="dd-menu" class="dd-menu" hidden></div>
     </div>
-    <div id="account" class="account"></div>
-    <button id="install-btn" class="gbtn small" type="button" hidden title="Installer Waktool comme une application">⤓ Installer</button>
-    <button id="theme-btn" class="theme-btn" type="button"></button>
-  </header>
+  </div>
 
-  <main class="layout">
+  <main class="layout" id="layout">
     <section class="main">
-      <div class="job-head" id="job-head"></div>
-      <div class="filters">
-        <label class="search">
-          <input id="q" type="search" placeholder="Rechercher une ressource, une zone…" autocomplete="off">
-        </label>
-        <label class="lvl">
-          Mon niveau <input id="lvl" type="number" min="0" max="200" step="1" placeholder="—">
-        </label>
-        <label class="chk"><input id="only" type="checkbox"> <span id="only-lbl">Récoltable seulement</span></label>
-        <select id="rtype" class="rtype" hidden title="Type de recettes">
-          <option value="all">Toutes les recettes</option>
-          <option value="craft">Fabrication</option>
-          <option value="up">Améliorations de rareté</option>
-        </select>
-        <button id="import-btn" class="gbtn small" type="button" title="Importer mes niveaux depuis une capture d'écran (Ctrl+V)">Importer une capture</button>
+      <!-- page Métiers -->
+      <div id="page-metiers">
+        <div class="jobcard" id="job-head"></div>
+        <nav class="subtabs" id="subtabs" role="tablist"></nav>
+        <div class="filters" id="filters">
+          <label class="search">
+            <input id="q" type="search" placeholder="Rechercher une ressource, une zone…" autocomplete="off">
+          </label>
+          <label class="chk"><input id="only" type="checkbox"> <span id="only-lbl">Accessibles seulement</span></label>
+          <select id="rtype" class="rtype" hidden title="Type de recettes">
+            <option value="all">Toutes les recettes</option>
+            <option value="craft">Fabrication</option>
+            <option value="up">Améliorations de rareté</option>
+          </select>
+        </div>
+        <div id="list" class="list"></div>
       </div>
-      <div id="list" class="list"></div>
+      <!-- page Rentabilité -->
+      <div id="page-rentabilite" hidden></div>
+      <!-- page Session -->
+      <div id="page-session" hidden></div>
     </section>
 
     <aside class="side" id="side"></aside>
@@ -63,7 +77,7 @@
   <footer class="foot">
     <p>Données : <a href="https://methodwakfu.com/artisanat/localisation-des-ressources/" target="_blank" rel="noopener">MethodWakfu</a>,
       gamedata Ankama <span id="ver"></span>, <a href="https://wakfu.wiki.gg" target="_blank" rel="noopener">Wakfu Wiki</a>.
-      Images © Ankama. Site non officiel.</p>
+      Images © Ankama. Site non officiel. · <button type="button" class="lnk" id="import-btn">Importer une capture (Ctrl+V)</button></p>
   </footer>
 
   <template id="tpl-res">
@@ -80,7 +94,7 @@
 
   <script src="data/crafts.js?v=ea2345be"></script>
   <script src="data/metiers.js?v=18b957f8"></script>
-  <script src="assets/app.js?v=117e3187"></script>
+  <script src="assets/app.js?v=ce74fdde"></script>
   <script src="assets/import.js?v=0263b7fa"></script>
   <script type="module" src="assets/auth.js?v=d26f6e14"></script>
 </body>
