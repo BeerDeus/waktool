@@ -211,3 +211,32 @@ details.recipe summary { cursor: pointer; color: var(--mut); }
 .pstats { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 10px 0 6px; font-size: 13px; }
 .pstats dt { color: var(--mut); white-space: nowrap; }
 .pstats dd { margin: 0; }
+
+/* bonus actifs */
+.bsum { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+.bsum > div { background: var(--card2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: grid; }
+.bsum span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--mut); }
+.bsum b { font-size: 17px; color: var(--ok); white-space: nowrap; }
+.bsum b.neg { color: var(--ko); }
+.bsum small { font-size: 11px; color: var(--mut); }
+.bgrp { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; display: grid; gap: 6px; }
+.bgrp h5 { margin: 0 0 2px; font-size: 12.5px; }
+.bgrp h5 small { font-weight: 400; color: var(--mut); }
+.region { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.region button {
+  display: grid; justify-items: center; gap: 1px; padding: 6px 4px; cursor: pointer; font: inherit; color: var(--txt);
+  background: var(--card2); border: 1px solid var(--line); border-radius: 8px; opacity: .65;
+}
+.region button img { width: 32px; height: 32px; image-rendering: pixelated; }
+.region button span { color: #e8b84a; font-size: 12px; letter-spacing: 1px; }
+.region button b { font-size: 12.5px; }
+.region button.on { opacity: 1; border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+.region button:hover { opacity: 1; }
+.bchk { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+.bchk em { font-style: normal; color: var(--ok); font-size: 12px; }
+.bchk select, .bchk input[type=number] {
+  background: var(--card2); border: 1px solid var(--line); color: var(--txt); border-radius: 6px; padding: 3px 5px; font: inherit; font-size: 12.5px; max-width: 100%;
+}
+.bchk input[type=number] { width: 60px; }
+#bonus details { margin-top: 8px; }
+.pin { grid-template-columns: repeat(2, minmax(0, 1fr)); }

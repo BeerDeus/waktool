@@ -42,7 +42,64 @@
     return h ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`;
   };
   const sec = d => (Math.round(d * 10 + 1e-6) / 10).toFixed(1).replace('.', ',');
-  const bonusPct = () => Math.max(0, +(store.get('bonus') || 0));
+
+  // ---------------------------------------------------------------- bonus actifs
+  const sj = {
+    get(k, d) { try { return { ...d, ...(JSON.parse(store.get(k)) || {}) }; } catch { return { ...d }; } },
+    set(k, v) { store.set(k, JSON.stringify(v)); },
+  };
+  const G_DEF = { region: null, havre: false, stasis: 0, turbo: false, xpExtra: 0, speed: 0,
+    sceau: false, potion: false, pacte: 0, mdc: 0, captchat: 0, qtyExtra: 0 };
+  const J_DEF = { tool: 'auto', pet: '', petLvl: 50, conso: false, casque: false, sacs: 0, gateau: false };
+  const REGION = [
+    { v: -10, stars: 0, img: 'img/ui/region-0.png', label: 'Aucune volonté respectée' },
+    { v: 10, stars: 1, img: 'img/ui/region-1.png', label: 'Volontés partiellement respectées' },
+    { v: 30, stars: 2, img: 'img/ui/region-2.png', label: 'Toutes les volontés respectées' },
+  ];
+  const bg = () => sj.get('bonus.global', G_DEF);
+  const bjob = k => sj.get('bonus.' + (k || cur), J_DEF);
+  const myLevel = () => (lvl.value === '' ? null : +lvl.value);
+
+  function bonusXp() {
+    const g = bg();
+    return (g.region ?? 0) + (g.havre ? 10 : 0) + (+g.stasis || 0) + (g.turbo ? 100 : 0) + (+g.xpExtra || 0);
+  }
+  const bonusPct = bonusXp;
+  const speedMult = () => 1 + (+bg().speed || 0) / 100;
+  const dur = (job, diff) => XP.duration(job, diff) / speedMult();
+
+  function activeTool(j, b, my) {
+    if (b.tool === 'none') return null;
+    if (b.tool === 'auto') return my === null ? null : j.tools.filter(t => t.level <= my).pop() || null;
+    return j.tools.find(t => t.name === b.tool) || null;
+  }
+
+  // détail des bonus de quantité (en %)
+  function qtyParts(j) {
+    const g = bg(), b = bjob(j.key), my = myLevel(), parts = [];
+    const t = activeTool(j, b, my);
+    if (t) parts.push([t.name, t.bonus]);
+    const pl = Math.max(1, Math.min(50, +b.petLvl || 1));
+    if (b.pet === 'job') parts.push([`${j.pet.name} niv. ${pl}`, +(10 + 0.8 * pl).toFixed(1)]);
+    if (b.pet === 'noxine') parts.push([`Noxine niv. ${pl}`, +(5 + 0.4 * pl).toFixed(1)]);
+    if (b.conso) parts.push([j.consumable.name, 15]);
+    if (b.casque && j.key === 'mineur') parts.push(['Casque de la Mine', 25]);
+    if (b.sacs && (j.key === 'mineur' || j.key === 'trappeur')) parts.push([`${j.key === 'mineur' ? 'Sac du Greuvard' : 'Sac à Pipi'} ×${b.sacs}`, 10 * b.sacs]);
+    if (b.gateau && j.key === 'paysan') parts.push(['Gâteau de riz', 15]);
+    if (g.sceau) parts.push(['Sceau des Compagnons', 50]);
+    if (g.potion) parts.push(['Potion de récolte', 50]);
+    if (+g.pacte) parts.push([+g.pacte === 25 ? 'Pacte prudent' : 'Pacte opportuniste', +g.pacte]);
+    if (+g.qtyExtra) parts.push(['Autre', +g.qtyExtra]);
+    if (+g.captchat) parts.push([`Malédiction Capt'chat ×${g.captchat}`, -33 * g.captchat]);
+    return parts;
+  }
+  // quantité par récolte : jet de base 1–3 (1–4 si ressources en surplus vs volontés), × (1 + bonus)
+  function qtyStats(j) {
+    const pct = qtyParts(j).reduce((a, p) => a + p[1], 0);
+    const k = Math.max(0, 1 + pct / 100);
+    const maxRoll = +bg().mdc === 33 ? 4 : 3;
+    return { pct, min: Math.floor(k), max: Math.ceil(maxRoll * k), avg: (1 + maxRoll) / 2 * k };
+  }
 
   let cur = location.hash.slice(1) || store.get('job') || D.jobs[0].key;
   if (!D.jobs.some(j => j.key === cur)) cur = D.jobs[0].key;
@@ -92,7 +149,11 @@
         if (tg !== null && tg !== '') o.target = +tg;
         if (Object.keys(o).length) progress[j.key] = o;
       });
-      return { levels, progress, prefs: { only: only.checked, bonus: bonusPct() } };
+      D.jobs.forEach(j => {
+        const raw = store.get('bonus.' + j.key);
+        if (raw) (progress[j.key] ||= {}).bonus = bjob(j.key);
+      });
+      return { levels, progress, prefs: { only: only.checked, bonuses: bg() } };
     },
     applyState(s) {
       D.jobs.forEach(j => {
@@ -103,10 +164,12 @@
         only.checked = s.prefs.only;
         store.set('only', only.checked ? '1' : '0');
       }
-      if (s.prefs && typeof s.prefs.bonus === 'number') store.set('bonus', String(s.prefs.bonus));
+      if (s.prefs && s.prefs.bonuses && typeof s.prefs.bonuses === 'object') sj.set('bonus.global', { ...G_DEF, ...s.prefs.bonuses });
+      else if (s.prefs && s.prefs.bonus === 30 && !store.get('bonus.global')) sj.set('bonus.global', { ...G_DEF, region: 30 });
       Object.entries(s.progress || {}).forEach(([k, o]) => {
         if (o && typeof o.xp === 'number') store.set('xp.' + k, String(o.xp));
         if (o && typeof o.target === 'number') store.set('target.' + k, String(o.target));
+        if (o && o.bonus && typeof o.bonus === 'object') sj.set('bonus.' + k, { ...J_DEF, ...o.bonus });
       });
       lvl.value = store.get(lvlKey()) || '';
       renderTabs();
@@ -186,7 +249,7 @@
         const x = document.createElement('div');
         x.className = 'xpline ' + cls;
         x.innerHTML = m === 0 ? 'Plus d’XP (20 niveaux d’écart ou plus)'
-          : `<b>${fmt(per)} XP</b> / action${m < 1 ? ` (${(m * 100).toLocaleString('fr-FR')} %)` : ''} · ${sec(XP.duration(j.key, my - r.level))} s` +
+          : `<b>${fmt(per)} XP</b> / action${m < 1 ? ` (${(m * 100).toLocaleString('fr-FR')} %)` : ''} · ${sec(dur(j.key, my - r.level))} s` +
             ` · <span title="Actions pour atteindre le niveau ${my + 1}">${fmt(nb)} actions → niv. ${my + 1}</span>`;
         $('.res-body', n).append(x);
       }
@@ -201,7 +264,7 @@
     const ok = j.resources.filter(r => r.level <= L);
     if (!ok.length) return null;
     return ok.reduce((b, r) => {
-      const m = XP.mult(L - r.level), d = XP.duration(j.key, L - r.level);
+      const m = XP.mult(L - r.level), d = dur(j.key, L - r.level);
       const rate = m / d;
       return !b || rate > b.rate ? { r, m, d, rate } : b;
     }, null);
@@ -237,7 +300,7 @@
         ${goal ? `<dt>Niveau ${tg}</dt><dd><b>${fmt(goal.xp)} XP</b> · ${fmt(goal.actions)} actions · ~${fmtDur(goal.time)}</dd>` : ''}
         ${b ? `<dt>Conseillé</dt><dd>${esc(b.r.name)} (niv. ${b.r.level}) · ${fmt(XP.per(my - b.r.level, bonusPct()))} XP en ${sec(b.d)} s</dd>` : ''}
       </dl>
-      <p class="meta">Base ${XP.base} XP par action (récolte, graine, bouture)${rare ? `, rare ×${rare}` : ''}, + ton bonus d’XP (ex. 30 % si les volontés du Maître de clan sont respectées).
+      <p class="meta">Base ${XP.base} XP par action (récolte, graine, bouture)${rare ? `, rare ×${rare}` : ''}, ${bonusXp() >= 0 ? '+' : ''}${bonusXp()} % de bonus actifs.
         Pleine XP sur les ressources jusqu’à 10 niveaux sous le tien, baisse progressive ensuite, rien à partir de 20.
         ${sure ? '' : '<br><b>Valeur de base vérifiée en Herboriste/Trappeur, supposée identique ici.</b>'}
         Plantation non comptée.</p>`;
@@ -249,7 +312,94 @@
     const upd = () => { out.innerHTML = progHtml(j, my); renderList(); changed(); };
     box.querySelector('#p-xp').addEventListener('input', e => { store.set('xp.' + j.key, e.target.value); upd(); });
     box.querySelector('#p-tg').addEventListener('input', e => { store.set('target.' + j.key, e.target.value); upd(); });
-    box.querySelector('#p-bonus').addEventListener('input', e => { store.set('bonus', e.target.value); upd(); });
+  }
+
+  function bonusHtml(j) {
+    const g = bg(), b = bjob(j.key), my = myLevel();
+    const q = qtyStats(j), parts = qtyParts(j);
+    const chk = (id, on, label, extra = '') => `<label class="bchk"><input type="checkbox" data-b="${id}" ${on ? 'checked' : ''}> ${label}${extra}</label>`;
+    const sel = (id, val, opts) => `<select data-b="${id}">${opts.map(([v, l]) => `<option value="${v}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    const auto = activeTool(j, { ...b, tool: 'auto' }, my);
+    const xpb = bonusXp();
+    const best = my === null ? null : bestAt(j, my);
+    const perH = best ? 3600 / best.d : 0;
+    return `
+      <div class="bsum">
+        <div><span>XP</span><b class="${xpb < 0 ? 'neg' : ''}">${xpb >= 0 ? '+' : ''}${xpb} %</b></div>
+        <div><span>Quantité</span><b class="${q.pct < 0 ? 'neg' : ''}">${q.pct >= 0 ? '+' : ''}${+q.pct.toFixed(1)} %</b></div>
+        <div><span>Par récolte</span><b>${q.min}–${q.max}</b><small>moy. ${q.avg.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}</small></div>
+        ${best ? `<div title="${esc(best.r.name)}, ${sec(best.d)} s par action"><span>Par heure*</span><b>${fmt(perH * q.avg)}</b><small>${fmt(perH * XP.per(my - best.r.level, xpb))} XP</small></div>` : ''}
+      </div>
+      <div class="bgrp"><h5>Bonus de région <small>(volontés du Maître de clan)</small></h5>
+        <div class="region">${REGION.map(r => `
+          <button type="button" data-region="${r.v}" class="${g.region === r.v ? 'on' : ''}" title="${r.label}">
+            <img src="${r.img}" alt=""><span>${'★'.repeat(r.stars)}${'☆'.repeat(2 - r.stars)}</span><b>${r.v > 0 ? '+' : ''}${r.v} %</b>
+          </button>`).join('')}
+        </div>
+      </div>
+      <div class="bgrp"><h5>Autres bonus d’XP</h5>
+        ${chk('havre', g.havre, 'Havre-Monde', ' <em>+10 %</em>')}
+        <label class="bchk">Source de Stasis ${sel('stasis', g.stasis, [[0, 'non'], [10, '+10 %'], [20, '+20 %']])}</label>
+        ${chk('turbo', g.turbo, 'Turbo Craft 30', ' <em>+100 %</em>')}
+        <label class="bchk">Autre ${'<input type="number" data-b="xpExtra" value="' + (+g.xpExtra || '') + '" placeholder="0"> %'}</label>
+      </div>
+      <div class="bgrp"><h5>Quantité récoltée</h5>
+        <label class="bchk">Outil ${sel('tool', b.tool, [['auto', `Auto (${auto ? auto.name + ' +' + auto.bonus + ' %' : 'aucun'})`], ['none', 'Aucun'], ...j.tools.map(t => [t.name, `${t.name} +${t.bonus} % (niv. ${t.level})`])])}</label>
+        <label class="bchk">Familier ${sel('pet', b.pet, [['', 'Aucun'], ['job', `${j.pet.name} (+10→50 %)`], ['noxine', 'Noxine (+5→25 %)']])}
+          ${b.pet ? `niv. <input type="number" data-b="petLvl" min="1" max="50" value="${+b.petLvl || 50}">` : ''}</label>
+        ${chk('conso', b.conso, j.consumable.name, ' <em>+15 %</em>')}
+        ${j.key === 'mineur' ? chk('casque', b.casque, 'Casque de la Mine', ' <em>+25 %</em>') : ''}
+        ${j.key === 'mineur' || j.key === 'trappeur' ? `<label class="bchk">${j.key === 'mineur' ? 'Sac du Greuvard' : 'Sac à Pipi'} ${sel('sacs', b.sacs, [[0, '0'], [1, '×1'], [2, '×2'], [3, '×3']])} <em>+10 % chacun</em></label>` : ''}
+        ${j.key === 'paysan' ? chk('gateau', b.gateau, 'Gâteau de riz', ' <em>+15 %</em>') : ''}
+        ${chk('g:sceau', g.sceau, 'Sceau des Compagnons', ' <em>+50 %</em>')}
+        ${chk('g:potion', g.potion, 'Potion de récolte', ' <em>+50 %</em>')}
+        <label class="bchk">Pacte ${sel('g:pacte', g.pacte, [[0, 'aucun'], [25, 'prudent +25 %'], [50, 'opportuniste +50 %']])}</label>
+        <label class="bchk">Volontés ${sel('g:mdc', g.mdc, [[0, 'quantité normale'], [33, 'ressource en surplus (jet 1–4)'], [66, 'ressource en manque (+66 % graines)']])}</label>
+        <label class="bchk">Capt’chat perdus ${sel('g:captchat', g.captchat, [0, 1, 2, 3, 4, 5, 6].map(n => [n, n ? `${n} (−${33 * n} %)` : '0']))}</label>
+        <label class="bchk">Autre ${'<input type="number" data-b="g:qtyExtra" value="' + (+g.qtyExtra || '') + '" placeholder="0"> %'}</label>
+      </div>
+      <div class="bgrp"><h5>Vitesse</h5>
+        <label class="bchk">Potion ${sel('g:speed', g.speed, [[0, 'aucune'], [50, 'Récolteur Véloce +50 %'], [100, 'Artipotion Exceptionnelle +100 %']])}</label>
+      </div>
+      ${parts.length ? `<details class="meta"><summary>Détail quantité</summary>${parts.map(([n, v]) => `${esc(n)} : ${v > 0 ? '+' : ''}${v} %`).join('<br>')}</details>` : ''}
+      <p class="meta">Les bonus d’une même catégorie s’additionnent. Turbo Craft et les potions de vitesse ne se cumulent pas.
+        ${+g.pacte ? '<br>Pacte : une partie des récoltes part dans l’inventaire PvP.' : ''}
+        ${best ? '<br>* En boucle sur ' + esc(best.r.name) + ', sans déplacements.' : ''}</p>`;
+  }
+
+  // les clés globales sont préfixées par « g: » ou listées ici
+  const GLOBAL_KEYS = ['havre', 'stasis', 'turbo', 'xpExtra'];
+  function bindBonus(j) {
+    const box = $('#bonus');
+    const refresh = () => {
+      $('#bonus-body').innerHTML = bonusHtml(j);
+      $('#prog-out').innerHTML = progHtml(j, myLevel());
+      renderList(); changed();
+    };
+    box.addEventListener('click', e => {
+      const r = e.target.closest('[data-region]');
+      if (!r) return;
+      const g = bg(), v = +r.dataset.region;
+      g.region = g.region === v ? null : v;
+      sj.set('bonus.global', g); refresh();
+    });
+    box.addEventListener('change', e => {
+      const el = e.target.closest('[data-b]');
+      if (!el) return;
+      let key = el.dataset.b;
+      const global = key.startsWith('g:') || GLOBAL_KEYS.includes(key);
+      key = key.replace(/^g:/, '');
+      const val = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' && !isNaN(+el.value) && el.value !== '' ? +el.value : (el.type === 'number' ? +el.value || 0 : el.value));
+      if (global) {
+        const g = bg(); g[key] = val;
+        if (key === 'turbo' && val) g.speed = 0;      // non cumulables
+        if (key === 'speed' && val) g.turbo = false;
+        sj.set('bonus.global', g);
+      } else {
+        const b = bjob(j.key); b[key] = val; sj.set('bonus.' + j.key, b);
+      }
+      refresh();
+    });
   }
 
   function renderSide() {
@@ -280,10 +430,10 @@
         <div class="pin">
           <label>XP actuelle<input id="p-xp" type="number" min="0" value="${esc(store.get('xp.' + j.key) || '')}" placeholder="0"></label>
           <label>Objectif niv.<input id="p-tg" type="number" min="1" max="250" value="${esc(store.get('target.' + j.key) || '')}" placeholder="auto"></label>
-          <label title="Bonus d'XP de récolte (région/volontés MdC, Havre-Monde, Sources…)">Bonus XP %<input id="p-bonus" type="number" min="0" max="500" value="${esc(store.get('bonus') || '')}" placeholder="0"></label>
         </div>
         <div id="prog-out">${progHtml(j, my)}</div>
       </div>
+      <div class="box" id="bonus"><h4>Bonus actifs</h4><div id="bonus-body">${bonusHtml(j)}</div></div>
       <div class="box"><h4>Outils ${esc(j.label)}</h4>${tools}
         <p class="meta" style="margin:10px 0 0">Le niveau indiqué est celui de la recette (craft par le ${esc(j.label)}).</p></div>
       <div class="box"><h4>Familier</h4>
@@ -297,6 +447,7 @@
       ${extras ? `<div class="box"><h4>Équipement bonus</h4>${extras}</div>` : ''}
       <div class="box"><h4>Bonus tous métiers</h4>${common}</div>`;
     bindProg(j, my);
+    bindBonus(j);
   }
 
   window.addEventListener('hashchange', () => {
