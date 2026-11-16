@@ -4,7 +4,8 @@
   const W = window.waktool;
   const D = window.WAKFU_DATA;
   const BASE = (window.WAKTOOL_TESS_BASE || 'vendor/tesseract/');
-  const JOBS = D.jobs.map(j => ({ key: j.key, label: j.label, n: norm(j.label) }));
+  const ALLJ = W.jobs();
+  const JOBS = ALLJ.map(j => ({ key: j.key, label: j.label, icon: j.icon, n: norm(j.label).replace(/[^a-z]/g, '') }));
 
   function norm(s) {
     return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -86,9 +87,11 @@
     const found = {};
     for (const raw of lines) {
       const t = norm(raw).replace(/[^a-z0-9.|!' ]/g, ' ');
-      // métier : un mot proche (distance <= 2) d'un nom de métier de récolte
+      // métier : un mot (ou deux mots accolés, ex. « Maître d'Armes ») proche d'un nom de métier
       let best = null;
-      for (const w of t.split(/\s+/).filter(w => w.length >= 4)) {
+      const ws = t.split(/\s+/).map(w => w.replace(/[^a-z]/g, '')).filter(Boolean);
+      const cands = [...ws, ...ws.slice(1).map((w, i) => ws[i] + w), ...ws.slice(2).map((w, i) => ws[i] + ws[i + 1] + w)];
+      for (const w of cands.filter(w => w.length >= 4)) {
         for (const j of JOBS) {
           const d = lev(w, j.n);
           if (d <= Math.max(1, Math.floor(j.n.length / 4)) && (!best || d < best.d)) best = { j, d };
@@ -184,13 +187,14 @@
   function showResult(res, url) {
     const cur = W.getState().levels || {};
     const n = Object.keys(res.levels).length;
-    const rows = JOBS.map(j => {
+    // métiers d'artisanat : affichés seulement s'ils sont lus sur la capture
+    const rows = JOBS.filter(j => ALLJ.find(x => x.key === j.key).type === 'harvest' || res.levels[j.key] !== undefined).map(j => {
       const v = res.levels[j.key];
       const old = cur[j.key];
       const diff = v !== undefined && v !== old;
       const unsure = res.unsure.includes(j.key);
       return `<tr class="${v === undefined ? 'miss' : ''}">
-        <td><img src="${D.jobs.find(x => x.key === j.key).icon}" alt=""> ${esc(j.label)}</td>
+        <td><img src="${j.icon}" alt=""> ${esc(j.label)}</td>
         <td class="old">${old ?? '—'}</td>
         <td><input type="number" min="0" max="250" name="${j.key}" value="${v ?? ''}" placeholder="—"
           class="${diff ? 'chg' : ''} ${unsure ? 'unsure' : ''}" ${unsure ? 'title="Lecture incertaine, vérifie"' : ''}>

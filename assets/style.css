@@ -286,3 +286,63 @@ details.bmore[open] > summary { margin-bottom: 2px; }
 /* vignettes d'apparence : fond blanc des images fondu dans une tuile claire (lisible dans les 2 thèmes) */
 .res-app { background: #ece6d8; }
 .res-app img { mix-blend-mode: multiply; }
+
+/* artisanat : menu déroulant + onglets épinglés */
+.crafts-dd { position: relative; flex: none; }
+.dd-btn { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--txt); font: inherit; cursor: pointer; }
+.dd-btn:hover, .dd-btn[aria-expanded="true"] { border-color: var(--mut); }
+.dd-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 250px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 6px; box-shadow: 0 10px 30px rgb(0 0 0 / .35);
+}
+.dd-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.dd-item:hover, .dd-item.on { background: var(--card2); }
+.dd-item img { width: 26px; height: 26px; }
+.dd-item > span:first-of-type { flex: 1; }
+.pinb { border: 0; background: none; cursor: pointer; font-size: 14px; opacity: .3; filter: grayscale(1); padding: 2px 4px; border-radius: 6px; }
+.pinb:hover { opacity: .8; }
+.pinb.on { opacity: 1; filter: none; }
+.pinb.big { font-size: 16px; vertical-align: 3px; }
+.tab.tmp { border-style: dashed; }
+.pinx { font-size: 11px; opacity: .5; margin-left: 2px; padding: 0 3px; border-radius: 4px; }
+.pinx:hover { opacity: 1; background: var(--card2); }
+
+/* bascule ressources / recettes */
+.job-head { flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin-left: auto; }
+.seg button { border: 0; background: var(--card); color: var(--mut); font: inherit; font-size: 13px; padding: 6px 14px; cursor: pointer; }
+.seg button.on { background: var(--c); color: #111; font-weight: 600; }
+.seg.small { margin: 0 0 10px; display: flex; }
+.seg.small button { flex: 1; padding: 5px 8px; font-size: 12.5px; }
+.rtype { background: var(--card); border: 1px solid var(--line); color: var(--txt); border-radius: 8px; padding: 8px 10px; font: inherit; }
+
+/* recettes */
+.res.rec { grid-template-columns: 54px 56px minmax(0, 1fr); border-left: 3px solid var(--rar); }
+.rec-ico { width: 56px; height: 56px; display: grid; place-items: center; background: var(--card2); border-radius: 10px; }
+.rec-ico img { width: 46px; height: 46px; }
+.rar { font-size: 11px; font-weight: 600; color: var(--rar); border: 1px solid var(--rar); border-radius: 999px; padding: 0 7px; vertical-align: 2px; }
+.upg { font-size: 11px; color: var(--mut); }
+.res.rec .ings { gap: 4px 12px; margin-top: 4px; }
+.ing { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; }
+.ing img { width: 24px; height: 24px; }
+.src { border: 1px solid var(--line); background: var(--card2); color: var(--mut); border-radius: 999px; font: inherit; font-size: 10.5px; padding: 0 6px; cursor: pointer; }
+.src:hover { color: var(--txt); border-color: var(--mut); }
+.src.craft { color: var(--acc); }
+.more { width: 100%; padding: 10px; border-radius: var(--r); border: 1px dashed var(--line); background: none; color: var(--mut); font: inherit; cursor: pointer; }
+.more:hover { color: var(--txt); border-color: var(--mut); }
+
+/* plan */
+.plan h5, #prog h5 { margin: 12px 0 6px; font-size: 12.5px; }
+.plan h5 small, #prog h5 small { font-weight: 400; color: var(--mut); }
+.psum { margin: 0 0 4px; font-size: 13.5px; }
+.plist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.plist li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; align-items: center; }
+.plist li > img, .plist li > .noimg { width: 28px; height: 28px; border-radius: 6px; }
+.plist small { color: var(--mut); }
+.plist.shop li { display: block; }
+.plist.shop { max-height: 420px; overflow: auto; }
+
+/* en-tête : les onglets prennent la place restante et défilent si besoin */
+.tabs { flex: 1 1 0; min-width: 0; }
+.dd-menu { left: auto; right: 0; }
+@media (max-width: 700px) { .tabs { flex-basis: 100%; order: 5; } }

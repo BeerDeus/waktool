@@ -127,18 +127,51 @@
     return { pct, min: Math.floor(k), max: Math.ceil(maxRoll * k), avg: (1 + maxRoll) / 2 * k };
   }
 
+  // ---------------------------------------------------------------- métiers (récolte + artisanat)
+  D.jobs.forEach(j => { j.type = 'harvest'; });
+  const CRAFTS = (window.WAKFU_CRAFTS || []).map(c => ({ ...c, type: 'craft' }));
+  const ALL = [...D.jobs, ...CRAFTS];
+  const getJob = k => ALL.find(j => j.key === k);
+  const pins = () => { try { return JSON.parse(store.get('pins')) || []; } catch { return []; } };
+  const setPins = a => store.set('pins', JSON.stringify(a));
+
   let cur = location.hash.slice(1) || store.get('job') || D.jobs[0].key;
-  if (!D.jobs.some(j => j.key === cur)) cur = D.jobs[0].key;
+  if (!getJob(cur)) cur = D.jobs[0].key;
 
   const tabs = $('#tabs');
-  tabs.innerHTML = D.jobs.map(j => `
-    <button class="tab" role="tab" data-k="${j.key}" style="--c:${j.color}">
-      <img src="${j.icon}" alt="">${esc(j.label)}
-    </button>`).join('');
   tabs.addEventListener('click', e => {
+    const pin = e.target.closest('[data-unpin]');
+    if (pin) { e.stopPropagation(); togglePin(pin.dataset.unpin); return; }
     const b = e.target.closest('.tab');
     if (b) select(b.dataset.k);
   });
+
+  // menu déroulant des métiers d'artisanat (+ punaise pour les sortir en onglet)
+  const dd = $('#crafts-dd'), ddBtn = $('#dd-btn'), ddMenu = $('#dd-menu');
+  function togglePin(k) {
+    const p = pins();
+    setPins(p.includes(k) ? p.filter(x => x !== k) : [...p, k]);
+    renderTabs(); renderDropdown(); changed();
+  }
+  function renderDropdown() {
+    const p = pins();
+    ddMenu.innerHTML = CRAFTS.map(c => {
+      const v = store.get(lvlKey(c.key));
+      return `<div class="dd-item ${c.key === cur ? 'on' : ''}" data-k="${c.key}" style="--c:${c.color}">
+        <img src="${c.icon}" alt=""><span>${esc(c.label)}</span>${v ? `<span class="tlvl">${esc(v)}</span>` : ''}
+        <button type="button" class="pinb ${p.includes(c.key) ? 'on' : ''}" data-pin="${c.key}" title="${p.includes(c.key) ? 'Retirer des onglets' : 'Épingler en onglet'}">📌</button>
+      </div>`;
+    }).join('');
+  }
+  ddBtn.addEventListener('click', e => { e.stopPropagation(); ddMenu.hidden = !ddMenu.hidden; ddBtn.setAttribute('aria-expanded', !ddMenu.hidden); });
+  ddMenu.addEventListener('click', e => {
+    e.stopPropagation();
+    const pb = e.target.closest('[data-pin]');
+    if (pb) { togglePin(pb.dataset.pin); return; }
+    const it = e.target.closest('.dd-item');
+    if (it) { ddMenu.hidden = true; select(it.dataset.k); }
+  });
+  document.addEventListener('click', () => { ddMenu.hidden = true; });
 
   const q = $('#q'), lvl = $('#lvl'), only = $('#only');
   const lvlKey = k => 'lvl.' + (k || cur);
@@ -150,31 +183,34 @@
   lvl.addEventListener('input', () => { store.set(lvlKey(), lvl.value); renderList(); renderSide(); renderTabs(); changed(); });
 
   function renderTabs() {
-    // ordre : niveau décroissant (métiers sans niveau à la fin, ordre d'origine sinon)
-    const idx = Object.fromEntries(D.jobs.map((j, i) => [j.key, i]));
+    // onglets : métiers de récolte + artisanat épinglé (+ celui ouvert depuis le menu),
+    // triés par niveau décroissant (sans niveau à la fin, ordre d'origine sinon)
+    const p = pins();
+    const shown = ALL.filter(j => j.type === 'harvest' || p.includes(j.key) || j.key === cur);
+    const idx = Object.fromEntries(ALL.map((j, i) => [j.key, i]));
     const lv = k => { const v = store.get(lvlKey(k)); return v === null || v === '' ? -1 : +v; };
-    [...tabs.querySelectorAll('.tab')]
-      .sort((a, b) => lv(b.dataset.k) - lv(a.dataset.k) || idx[a.dataset.k] - idx[b.dataset.k])
-      .forEach(b => tabs.append(b));
-    tabs.querySelectorAll('.tab').forEach(b => {
-      const v = store.get(lvlKey(b.dataset.k));
-      let s = b.querySelector('.tlvl');
-      if (!s) { s = document.createElement('span'); s.className = 'tlvl'; b.append(s); }
-      s.textContent = v || '';
-      s.hidden = !v;
-    });
+    shown.sort((a, b) => lv(b.key) - lv(a.key) || idx[a.key] - idx[b.key]);
+    tabs.innerHTML = shown.map(j => {
+      const v = store.get(lvlKey(j.key));
+      const tmp = j.type === 'craft' && !p.includes(j.key);
+      return `<button class="tab ${j.type === 'craft' ? 'craft' : ''} ${tmp ? 'tmp' : ''}" role="tab" data-k="${j.key}" style="--c:${j.color}" aria-selected="${j.key === cur}">
+        <img src="${j.icon}" alt="">${esc(j.label)}${v ? `<span class="tlvl">${esc(v)}</span>` : ''}
+        ${j.type === 'craft' ? `<span class="pinx" data-unpin="${j.key}" title="${tmp ? 'Épingler en onglet' : 'Retirer des onglets'}">${tmp ? '📌' : '×'}</span>` : ''}
+      </button>`;
+    }).join('');
+    renderDropdown();
   }
 
   // API utilisée par auth.js (sync Firestore)
   window.waktool = {
     getState() {
       const levels = {};
-      D.jobs.forEach(j => {
+      ALL.forEach(j => {
         const v = store.get(lvlKey(j.key));
         if (v !== null && v !== '') levels[j.key] = +v;
       });
       const progress = {};
-      D.jobs.forEach(j => {
+      ALL.forEach(j => {
         const xp = store.get('xp.' + j.key), tg = store.get('target.' + j.key);
         const o = {};
         if (xp !== null && xp !== '') o.xp = +xp;
@@ -185,10 +221,11 @@
         const raw = store.get('bonus.' + j.key);
         if (raw) (progress[j.key] ||= {}).bonus = bjob(j.key);
       });
-      return { levels, progress, prefs: { only: only.checked, bonuses: bg(), theme: curTheme() } };
+      return { levels, progress, prefs: { only: only.checked, bonuses: bg(), theme: curTheme(), pins: pins() } };
     },
     applyState(s) {
-      D.jobs.forEach(j => {
+      if (s.prefs && Array.isArray(s.prefs.pins)) setPins(s.prefs.pins.filter(k => CRAFTS.some(c => c.key === k)));
+      ALL.forEach(j => {
         const v = s.levels && s.levels[j.key];
         if (v !== undefined && v !== null) store.set(lvlKey(j.key), String(v));
       });
@@ -214,6 +251,7 @@
       changed();
     },
     onChange(f) { listeners.push(f); },
+    jobs: () => ALL.map(j => ({ key: j.key, label: j.label, icon: j.icon, type: j.type })),
   };
 
   const icon = (it, cls = '') => it.icon
@@ -225,13 +263,15 @@
       <div class="ings">${r.ingredients.map(i => `<span class="ing">${icon(i)}${i.qty}× ${esc(i.name)}</span>`).join('')}</div>
     </details>` : '';
 
-  function job() { return D.jobs.find(j => j.key === cur); }
+  function job() { return getJob(cur); }
+  const isRecView = j => j.type === 'craft' || store.get('view.' + j.key) === 'rec';
 
   function select(k) {
     cur = k;
     store.set('job', k);
     history.replaceState(null, '', '#' + k);
     lvl.value = store.get(lvlKey()) || '';
+    renderTabs();
     render();
   }
 
@@ -239,17 +279,31 @@
     const j = job();
     document.documentElement.style.setProperty('--c', j.color);
     tabs.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.k === cur));
-    const max = Math.max(...j.resources.map(r => r.level));
+    const rv = isRecView(j);
+    const info = j.type === 'craft'
+      ? `${fmt(j.count)} recettes · niv. 0 → ${j.max} · métier d’artisanat`
+      : `${j.resources.length} ${j.key === 'trappeur' ? 'familles de monstres' : 'ressources'} · niv. 0 → ${Math.max(...j.resources.map(r => r.level))}`;
+    const p = pins();
     $('#job-head').innerHTML = `
       <img src="${j.icon}" alt="">
-      <div><h2>${esc(j.label)}</h2>
-      <p>${j.resources.length} ${j.key === 'trappeur' ? 'familles de monstres' : 'ressources'} · niv. 0 → ${max}</p></div>`;
+      <div><h2>${esc(j.label)}${j.type === 'craft' ? ` <button type="button" class="pinb big ${p.includes(j.key) ? 'on' : ''}" id="head-pin" title="${p.includes(j.key) ? 'Retirer des onglets' : 'Épingler en onglet'}">📌</button>` : ''}</h2>
+      <p>${info}</p></div>
+      ${j.type === 'harvest' ? `<div class="seg" role="tablist">
+        <button type="button" data-view="res" class="${rv ? '' : 'on'}">Ressources</button>
+        <button type="button" data-view="rec" class="${rv ? 'on' : ''}">Recettes</button></div>` : ''}`;
+    $('#job-head').querySelectorAll('[data-view]').forEach(b => b.onclick = () => { store.set('view.' + j.key, b.dataset.view); render(); });
+    const hp = $('#head-pin'); if (hp) hp.onclick = () => { togglePin(j.key); render(); };
+    $('#only-lbl').textContent = rv ? 'Faisable seulement' : 'Récoltable seulement';
+    $('#rtype').hidden = !rv;
+    q.placeholder = rv ? 'Rechercher une recette, un ingrédient…' : 'Rechercher une ressource, une zone…';
+    recLimit = 120;
     renderList();
     renderSide();
   }
 
   function renderList() {
     const j = job();
+    if (isRecView(j)) { renderRecipes(j); return; }
     const term = norm(q.value.trim());
     const my = lvl.value === '' ? null : +lvl.value;
     const rows = j.resources.filter(r => {
@@ -347,7 +401,7 @@
   function bindProg(j, my) {
     const box = $('#prog');
     const out = $('#prog-out');
-    const upd = () => { out.innerHTML = progHtml(j, my); renderList(); changed(); };
+    const upd = () => { out.innerHTML = progHtml(j, my); refreshPlan(); renderList(); changed(); };
     box.querySelector('#p-xp').addEventListener('input', e => { store.set('xp.' + j.key, e.target.value); upd(); });
     box.querySelector('#p-tg').addEventListener('input', e => { store.set('target.' + j.key, e.target.value); upd(); });
   }
@@ -429,6 +483,7 @@
     const refresh = () => {
       $('#bonus-body').innerHTML = bonusHtml(j);
       $('#prog-out').innerHTML = progHtml(j, myLevel());
+      refreshPlan();
       renderList(); changed();
     };
     box.addEventListener('toggle', e => {
@@ -461,9 +516,291 @@
     });
   }
 
+  // ---------------------------------------------------------------- recettes (chargées à la demande)
+  const RARITY = { 0: ['Commun', '#9aa5ad'], 1: ['Commun', '#9aa5ad'], 2: ['Rare', '#4fb36b'], 3: ['Mythique', '#e08a2c'],
+    4: ['Légendaire', '#e6c229'], 5: ['Relique', '#a66be0'], 6: ['Souvenir', '#5fb3e6'], 7: ['Épique', '#e05fae'] };
+  const RD = {}, RP = {};
+  function loadRecipes(key) {
+    if (!RP[key]) {
+      RP[key] = fetch(`data/recipes/${key}.json?v=${window.WAKFU_RECIPES_V || ''}`).then(r => r.json()).then(d => {
+        const items = {};
+        for (const [id, a] of Object.entries(d.items)) {
+          items[id] = { id: +id, name: a[0], icon: a[1], level: a[2], rarity: a[3], src: a[4], prod: a[5] };
+        }
+        const recipes = d.recipes.map(([id, level, xp, up, res, ing]) => ({
+          id, level, xp, up: !!up, res: { item: items[res[0]], qty: res[1] },
+          ing: ing.map(([i, n]) => ({ item: items[i], qty: n })),
+        }));
+        RD[key] = { items, recipes };
+        return RD[key];
+      });
+    }
+    return RP[key];
+  }
+  function needRecipes(key) {
+    if (RD[key]) return RD[key];
+    loadRecipes(key).then(() => { if (cur === key) { renderList(); if (getJob(key).type === 'craft') renderSide(); else refreshPlan(); } });
+    return null;
+  }
+  const srcLabel = src => { const [k, l] = src.split(':'); const j = getJob(k); return j ? `${j.label} ${l}` : src; };
+  const prodLabel = prod => prod.map(k => (getJob(k) || { label: k }).label).join(', ');
+
+  // ressource récoltable correspondant à un objet (pour un métier de récolte)
+  function resOfItem(j, id) {
+    j._byItem ||= (() => {
+      const m = {};
+      j.resources.forEach(r => ['normal', 'rare', 'seed'].forEach(k => (r[k] || []).forEach(it => { if (it.id) m[it.id] ??= r; })));
+      return m;
+    })();
+    return j._byItem[id] || null;
+  }
+
+  let recLimit = 120;
+  function renderRecipes(j) {
+    const list = $('#list');
+    const data = needRecipes(j.key);
+    if (!data) { list.innerHTML = '<p class="empty">Chargement des recettes…</p>'; return; }
+    const term = norm(q.value.trim());
+    const my = myLevel();
+    const type = j.type === 'craft' ? ($('#rtype').value || 'all') : 'all';
+    const rows = data.recipes.filter(r => {
+      if (only.checked && my !== null && r.level > my) return false;
+      if (type === 'craft' && r.up) return false;
+      if (type === 'up' && !r.up) return false;
+      if (!term) return true;
+      return norm([r.res.item.name, ...r.ing.map(i => i.item.name)].join(' ')).includes(term);
+    });
+    if (!rows.length) { list.innerHTML = '<p class="empty">Aucune recette.</p>'; return; }
+    const html = rows.slice(0, recLimit).map(r => {
+      const it = r.res.item, rar = RARITY[it.rarity] || RARITY[0];
+      const m = my === null ? null : XP.mult(my - r.level);
+      const xpl = my === null ? `<b>${fmt(r.xp)} XP</b>`
+        : r.level > my ? `<b>${fmt(r.xp)} XP</b> · niveau insuffisant`
+          : m === 0 ? 'Plus d’XP (20 niveaux d’écart ou plus)'
+            : `<b>${fmt(Math.floor(r.xp * m))} XP</b>${m < 1 ? ` (${(m * 100).toLocaleString('fr-FR')} %)` : ''}`;
+      const cls = my === null || r.level > my ? '' : m === 1 ? 'full' : m > 0 ? 'part' : 'none';
+      return `<article class="res rec ${my !== null && r.level > my ? 'locked' : ''}" style="--rar:${rar[1]}">
+        <div class="res-lvl"><small>niv.</small>${r.level}</div>
+        <div class="rec-ico"><img src="${it.icon}" alt="" loading="lazy"></div>
+        <div class="res-body">
+          <h3>${esc(it.name)}${r.res.qty > 1 ? ` ×${r.res.qty}` : ''} <span class="rar">${rar[0]}</span>${r.up ? ' <span class="upg" title="Amélioration de rareté">⬆ amélioration</span>' : ''}</h3>
+          <div class="ings">${r.ing.map(i => ingChip(i)).join('')}</div>
+          <div class="xpline ${cls}">${xpl}</div>
+        </div></article>`;
+    }).join('');
+    list.innerHTML = html + (rows.length > recLimit
+      ? `<button type="button" class="more" id="rec-more">Afficher plus (${fmt(rows.length - recLimit)} restantes)</button>` : '');
+    const mb = $('#rec-more'); if (mb) mb.onclick = () => { recLimit += 200; renderRecipes(j); };
+  }
+
+  function ingChip(i, qty = i.qty) {
+    const it = i.item;
+    const tag = it.src ? `<button type="button" class="src" data-goto="${it.src.split(':')[0]}" data-q="${esc(it.name)}" title="Se récolte : ${esc(srcLabel(it.src))}">${esc(srcLabel(it.src))}</button>`
+      : it.prod ? `<button type="button" class="src craft" data-goto="${it.prod[0]}" data-q="${esc(it.name)}" title="Se fabrique : ${esc(prodLabel(it.prod))}">⚒ ${esc(prodLabel(it.prod))}</button>` : '';
+    return `<span class="ing" style="--rar:${(RARITY[it.rarity] || RARITY[0])[1]}">${icon(it)}<b>${fmt(qty)}×</b> ${esc(it.name)} ${tag}</span>`;
+  }
+  // clic sur la source d'un ingrédient : ouvre le métier concerné filtré sur l'objet
+  document.addEventListener('click', e => {
+    const g = e.target.closest('[data-goto]');
+    if (!g || !getJob(g.dataset.goto)) return;
+    e.preventDefault();
+    q.value = g.dataset.q;
+    if (getJob(g.dataset.goto).type === 'harvest') store.set('view.' + g.dataset.goto, getJob(g.dataset.goto).type === 'harvest' && g.classList.contains('craft') ? 'rec' : 'res');
+    select(g.dataset.goto);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // ---------------------------------------------------------------- plan de montée
+  const addTo = (map, key, n, extra) => { const o = map.get(key) || { n: 0, ...extra }; o.n += n; map.set(key, o); };
+
+  // métier de récolte : récolte seule ou récolte + craft des ressources récoltées
+  function harvestPlan(j, from, xp0, to, strat) {
+    const data = strat === 'craft' ? RD[j.key] : null;
+    const qAvg = qtyStats(j).avg || 1;
+    const bonus = bonusPct();
+    const res = new Map(), crafts = new Map();
+    let actions = 0, time = 0, xpTotal = 0;
+    for (let L = from; L < to; L++) {
+      const need = Math.max(0, XP.need(L) - (L === from ? xp0 : 0));
+      xpTotal += need;
+      const b = bestAt(j, L);
+      if (!b || !b.m) return { actions: Infinity, time: Infinity, xp: XP.total(to) - XP.total(from) - xp0, res, crafts };
+      let best = { rate: XP.per(L - b.r.level, bonus) / b.d, kind: 'h', b };
+      if (data) {
+        for (const r of data.recipes) {
+          if (r.up || r.level > L || !r.ing.length) continue;
+          const m = XP.mult(L - r.level);
+          if (!m) continue;
+          let ok = true, cx = Math.floor(r.xp * m), ct = 0;
+          const parts = [];
+          for (const i of r.ing) {
+            const rr = resOfItem(j, i.item.id);
+            if (!rr || rr.level > L) { ok = false; break; }
+            const a = i.qty / qAvg, per = XP.per(L - rr.level, bonus), d = dur(j.key, L - rr.level, rr);
+            cx += a * per; ct += a * d;
+            parts.push({ rr, a, item: i.item, qty: i.qty });
+          }
+          if (!ok || !ct) continue;
+          if (cx / ct > best.rate) best = { rate: cx / ct, kind: 'c', r, cx, ct, parts };
+        }
+      }
+      if (best.kind === 'h') {
+        const per = XP.per(L - b.r.level, bonus), n = Math.ceil(need / per);
+        actions += n; time += n * b.d;
+        addTo(res, b.r.name, n, { r: b.r, items: 0 });
+        res.get(b.r.name).items += n * qAvg;
+      } else {
+        const cycles = need / best.cx;
+        time += cycles * best.ct;
+        addTo(crafts, best.r.id, cycles, { r: best.r });
+        for (const pt of best.parts) {
+          actions += cycles * pt.a;
+          addTo(res, pt.rr.name, cycles * pt.a, { r: pt.rr, items: 0 });
+          res.get(pt.rr.name).items += cycles * pt.qty;
+        }
+      }
+    }
+    return { actions: Math.ceil(actions), time, xp: xpTotal, res, crafts };
+  }
+
+  // métier d'artisanat : recette la plus intéressante à chaque niveau
+  function craftPlan(j, from, xp0, to, metric, withUp) {
+    const data = RD[j.key];
+    const crafts = new Map(), ing = new Map();
+    let n = 0, xpTotal = 0;
+    for (let L = from; L < to; L++) {
+      const need = Math.max(0, XP.need(L) - (L === from ? xp0 : 0));
+      xpTotal += need;
+      let best = null;
+      for (const r of data.recipes) {
+        if (r.level > L || (r.up && !withUp) || !r.ing.length) continue;
+        const x = Math.floor(r.xp * XP.mult(L - r.level));
+        if (!x) continue;
+        const cost = metric === 'ing' ? r.ing.reduce((a, i) => a + i.qty, 0) : 1;
+        const score = x / cost;
+        if (!best || score > best.score || (score === best.score && x > best.x)) best = { r, x, score };
+      }
+      if (!best) return { crafts, ing, n: Infinity, xp: xpTotal };
+      const c = Math.ceil(need / best.x);
+      n += c;
+      addTo(crafts, best.r.id, c, { r: best.r });
+      best.r.ing.forEach(i => addTo(ing, i.item.id, c * i.qty, { item: i.item }));
+    }
+    return { crafts, ing, n, xp: xpTotal };
+  }
+
+  function planTarget(j, my) {
+    return +(store.get('target.' + j.key) || 0) || Math.min(200, (Math.floor(my / 10) + 1) * 10);
+  }
+
+  function craftListHtml(crafts) {
+    return [...crafts.values()].sort((a, b) => a.r.level - b.r.level).map(c => {
+      const it = c.r.res.item;
+      return `<li>${icon(it)}<span><b>${fmt(Math.ceil(c.n))}×</b> ${esc(it.name)} <small>niv. ${c.r.level}</small></span></li>`;
+    }).join('');
+  }
+
+  // bloc « Plan » d'un métier de récolte (ajouté sous la progression)
+  function harvestPlanHtml(j, my) {
+    if (my === null) return '';
+    const strat = store.get('strat.' + j.key) || 'harvest';
+    const tg = planTarget(j, my);
+    if (tg <= my) return '';
+    let note = '';
+    if (strat === 'craft' && !RD[j.key]) { needRecipes(j.key); note = '<p class="meta">Chargement des recettes…</p>'; }
+    const xp = Math.min(curXp(), XP.need(my) - 1);
+    const pl = harvestPlan(j, my, xp, tg, strat);
+    const qAvg = qtyStats(j).avg;
+    const resRows = [...pl.res.values()].sort((a, b) => a.r.level - b.r.level).map(o => `
+      <li>${icon({ icon: o.r.appearance || (o.r.normal[0] || {}).icon, name: o.r.name })}<span><b>${fmt(Math.ceil(o.n))}</b> récoltes de ${esc(o.r.name)} <small>niv. ${o.r.level}</small><br>
+        <small>≈ ${fmt(o.items)} ${esc(((o.r.normal || [])[0] || {}).name || 'ressources')}</small></span></li>`).join('');
+    return `
+      <div class="plan">
+        <div class="seg small">
+          <button type="button" data-strat="harvest" class="${strat === 'harvest' ? 'on' : ''}">Récolte seule</button>
+          <button type="button" data-strat="craft" class="${strat === 'craft' ? 'on' : ''}">Récolte + craft</button>
+        </div>
+        ${note}
+        <p class="psum">Niv. ${my} → <b>${tg}</b> : ${fmt(pl.actions)} récoltes · ~${fmtDur(pl.time)}${pl.crafts.size ? ` · ${fmt([...pl.crafts.values()].reduce((a, c) => a + Math.ceil(c.n), 0))} crafts` : ''}</p>
+        <h5>À récolter</h5><ul class="plist">${resRows}</ul>
+        ${pl.crafts.size ? `<h5>À crafter <small>(atelier du métier)</small></h5><ul class="plist">${craftListHtml(pl.crafts)}</ul>` : ''}
+        <p class="meta">Quantités estimées avec ${qAvg.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ressources par récolte (bonus actifs).
+          ${strat === 'craft' ? 'Les ressources récoltées sont transformées dès que c’est plus rentable que la récolte seule. XP des recettes = valeur de base du jeu (à confirmer en jeu).' : ''}</p>
+      </div>`;
+  }
+
+  // colonne de droite d'un métier d'artisanat
+  function renderCraftSide(j, my) {
+    const data = needRecipes(j.key);
+    const metric = store.get('metric.' + j.key) || 'crafts';
+    const withUp = store.get('withup.' + j.key) === '1';
+    let plan = '<p class="meta">Renseigne « Mon niveau » pour obtenir un plan de montée.</p>';
+    if (!data) plan = '<p class="meta">Chargement des recettes…</p>';
+    else if (my !== null) {
+      const tg = planTarget(j, my);
+      const xp = Math.min(curXp(), XP.need(my) - 1);
+      const need = XP.need(my);
+      const pl = tg > my ? craftPlan(j, my, xp, tg, metric, withUp) : null;
+      const ings = pl ? [...pl.ing.values()].sort((a, b) => b.n - a.n) : [];
+      plan = `
+        <div class="pbar"><span style="width:${(xp / need * 100).toFixed(1)}%"></span><em>${fmt(xp)} / ${fmt(need)} XP</em></div>
+        ${pl ? `
+        <div class="seg small">
+          <button type="button" data-metric="crafts" class="${metric === 'crafts' ? 'on' : ''}" title="Recette qui donne le plus d'XP">Moins de crafts</button>
+          <button type="button" data-metric="ing" class="${metric === 'ing' ? 'on' : ''}" title="Meilleure XP par ingrédient">Moins d’ingrédients</button>
+        </div>
+        <label class="bchk"><input type="checkbox" id="withup" ${withUp ? 'checked' : ''}> Inclure les améliorations de rareté</label>
+        <p class="psum">Niv. ${my} → <b>${tg}</b> : ${fmt(pl.xp)} XP · ${isFinite(pl.n) ? fmt(pl.n) + ' crafts' : 'aucune recette disponible'}</p>
+        <h5>À crafter</h5><ul class="plist">${craftListHtml(pl.crafts)}</ul>
+        <h5>Liste de courses <small>(${ings.length} ingrédients)</small></h5>
+        <ul class="plist shop">${ings.map(o => `<li>${ingChip({ item: o.item }, o.n)}</li>`).join('')}</ul>
+        <p class="meta">XP des recettes = valeur de base du jeu (à confirmer en jeu). Pleine XP jusqu’à 10 niveaux sous le tien. Les ingrédients craftables ne sont pas détaillés.</p>`
+        : '<p class="meta">Choisis un objectif supérieur à ton niveau.</p>'}`;
+    }
+    $('#side').innerHTML = `
+      <div class="box" id="prog" data-box="prog"><h4>Progression ${esc(j.label)}</h4>
+        <div class="pin">
+          <label>XP actuelle<input id="p-xp" type="number" min="0" value="${esc(store.get('xp.' + j.key) || '')}" placeholder="0"></label>
+          <label>Objectif niv.<input id="p-tg" type="number" min="1" max="250" value="${esc(store.get('target.' + j.key) || '')}" placeholder="auto"></label>
+        </div>
+        <div id="prog-out">${plan}</div>
+      </div>`;
+    const box = $('#prog');
+    const upd = () => { renderCraftSide(j, myLevel()); changed(); };
+    box.querySelector('#p-xp').addEventListener('change', e => { store.set('xp.' + j.key, e.target.value); upd(); });
+    box.querySelector('#p-tg').addEventListener('change', e => { store.set('target.' + j.key, e.target.value); upd(); });
+    box.querySelectorAll('[data-metric]').forEach(b => b.onclick = () => { store.set('metric.' + j.key, b.dataset.metric); upd(); });
+    const wu = box.querySelector('#withup'); if (wu) wu.onchange = () => { store.set('withup.' + j.key, wu.checked ? '1' : '0'); upd(); };
+    bindCollapsible();
+  }
+
+  function refreshPlan() {
+    const o = $('#plan-out');
+    if (o) o.innerHTML = harvestPlanHtml(job(), myLevel()) || '<p class="meta">Renseigne ton niveau et un objectif.</p>';
+  }
+  $('#side').addEventListener('click', e => {
+    const b = e.target.closest('[data-strat]');
+    if (!b) return;
+    store.set('strat.' + cur, b.dataset.strat);
+    refreshPlan();
+  });
+
+  function bindCollapsible() {
+    $('#side').querySelectorAll('.box[data-box]').forEach(box => {
+      const k = 'ui.box.' + box.dataset.box;
+      box.classList.toggle('collapsed', store.get(k) === '0');
+      const h = box.querySelector('h4');
+      h.setAttribute('role', 'button'); h.tabIndex = 0;
+      const tg = () => { box.classList.toggle('collapsed'); store.set(k, box.classList.contains('collapsed') ? '0' : '1'); };
+      h.onclick = tg;
+      h.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tg(); } };
+    });
+  }
+
   function renderSide() {
     const j = job();
     const my = lvl.value === '' ? null : +lvl.value;
+    if (j.type === 'craft') { renderCraftSide(j, my); return; }
     const usable = j.tools.filter(t => my !== null && t.level <= my).pop();
     const next = j.tools.find(t => my !== null && t.level > my);
     const tools = j.tools.map(t => `
@@ -492,6 +829,7 @@
         </div>
         <div id="prog-out">${progHtml(j, my)}</div>
       </div>
+      <div class="box" id="plan" data-box="plan"><h4>Plan de montée</h4><div id="plan-out">${harvestPlanHtml(j, my) || '<p class="meta">Renseigne ton niveau et un objectif.</p>'}</div></div>
       <div class="box" id="bonus" data-box="bonus"><h4>Bonus actifs</h4><div id="bonus-body">${bonusHtml(j)}</div></div>
       <div class="box" data-box="tools"><h4>Outils ${esc(j.label)}</h4>${tools}
         <p class="meta" style="margin:10px 0 0">Le niveau indiqué est celui de la recette (craft par le ${esc(j.label)}).</p></div>
@@ -507,22 +845,14 @@
       <div class="box" data-box="common"><h4>Bonus tous métiers</h4>${common}</div>`;
     bindProg(j, my);
     bindBonus(j);
-    // blocs repliables (clic sur le titre), état mémorisé
-    $('#side').querySelectorAll('.box[data-box]').forEach(box => {
-      const k = 'ui.box.' + box.dataset.box;
-      box.classList.toggle('collapsed', store.get(k) === '0');
-      const h = box.querySelector('h4');
-      h.setAttribute('role', 'button'); h.tabIndex = 0;
-      const tg = () => { box.classList.toggle('collapsed'); store.set(k, box.classList.contains('collapsed') ? '0' : '1'); };
-      h.onclick = tg;
-      h.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tg(); } };
-    });
+    bindCollapsible();
   }
 
   window.addEventListener('hashchange', () => {
     const k = location.hash.slice(1);
-    if (k && k !== cur && D.jobs.some(j => j.key === k)) select(k);
+    if (k && k !== cur && getJob(k)) select(k);
   });
-  renderTabs();
+  $('#rtype').addEventListener('change', () => { store.set('rtype', $('#rtype').value); recLimit = 120; renderList(); });
+  $('#rtype').value = store.get('rtype') || 'all';
   select(cur);
 })();

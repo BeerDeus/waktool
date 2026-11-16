@@ -10,7 +10,7 @@
     // thème appliqué avant le rendu (évite le flash)
     try { const t = localStorage.getItem('waktool.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
-  <link rel="stylesheet" href="assets/style.css?v=9f6532b7">
+  <link rel="stylesheet" href="assets/style.css?v=7bcd912c">
 </head>
 <body>
   <header class="top">
@@ -22,6 +22,10 @@
       </div>
     </div>
     <nav id="tabs" class="tabs" role="tablist"></nav>
+    <div id="crafts-dd" class="crafts-dd">
+      <button id="dd-btn" class="dd-btn" type="button" aria-haspopup="true" aria-expanded="false">Artisanat ▾</button>
+      <div id="dd-menu" class="dd-menu" hidden></div>
+    </div>
     <div id="account" class="account"></div>
     <button id="theme-btn" class="theme-btn" type="button"></button>
   </header>
@@ -36,7 +40,12 @@
         <label class="lvl">
           Mon niveau <input id="lvl" type="number" min="0" max="200" step="1" placeholder="—">
         </label>
-        <label class="chk"><input id="only" type="checkbox"> Récoltable seulement</label>
+        <label class="chk"><input id="only" type="checkbox"> <span id="only-lbl">Récoltable seulement</span></label>
+        <select id="rtype" class="rtype" hidden title="Type de recettes">
+          <option value="all">Toutes les recettes</option>
+          <option value="craft">Fabrication</option>
+          <option value="up">Améliorations de rareté</option>
+        </select>
         <button id="import-btn" class="gbtn small" type="button" title="Importer mes niveaux depuis une capture d'écran (Ctrl+V)">Importer une capture</button>
       </div>
       <div id="list" class="list"></div>
@@ -63,9 +72,10 @@
     </article>
   </template>
 
+  <script src="data/crafts.js?v=ea2345be"></script>
   <script src="data/metiers.js?v=18b957f8"></script>
-  <script src="assets/app.js?v=36c70f36"></script>
-  <script src="assets/import.js?v=c8a68727"></script>
+  <script src="assets/app.js?v=9a169649"></script>
+  <script src="assets/import.js?v=961fa709"></script>
   <script type="module" src="assets/auth.js?v=339c5af2"></script>
 </body>
 </html>
