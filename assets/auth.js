@@ -96,10 +96,12 @@ onAuthStateChanged(auth, async u => {
       levels: { ...(local.levels || {}), ...(remote.levels || {}) },
       prefs: { ...(local.prefs || {}), ...(remote.prefs || {}) },
       progress: { ...(local.progress || {}), ...(remote.progress || {}) },
+      prices: { ...(remote.prices || {}) }, // fusion par date dans applyState (le plus récent gagne)
     };
     W.applyState(merged);
     const needPush = !snap.exists() ||
-      Object.keys(merged.levels).some(k => (remote.levels || {})[k] === undefined);
+      Object.keys(merged.levels).some(k => (remote.levels || {})[k] === undefined) ||
+      Object.entries(local.prices || {}).some(([id, v]) => !(remote.prices || {})[id] || remote.prices[id][1] < v[1]);
     if (needPush) await save();
     else { status = 'Synchronisé ✓'; render(); }
   } catch (e) {

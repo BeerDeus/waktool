@@ -114,12 +114,14 @@
     const bmp = await createImageBitmap(blob);
     const w = await getWorker(onProgress);
     const votes = {};
+    const passes = [];
     let text = '';
     for (const [i, pass] of PASSES.entries()) {
       const { data } = await w.recognize(await preprocess(bmp, pass));
       let lines = (data.lines || []).map(l => l.text.trim()).filter(Boolean);
       if (!lines.length) lines = data.text.split('\n');
       if (!text) text = lines.join('\n');
+      passes.push(lines);
       for (const [k, v] of Object.entries(parseLevels(lines))) (votes[k] ||= []).push(v);
       onProgress && onProgress({ status: 'pass', progress: (i + 1) / PASSES.length });
     }
@@ -130,7 +132,82 @@
       levels[k] = best;
       if (n < PASSES.length) unsure.push(k);
     }
-    return { levels, unsure, text };
+    return { levels, unsure, text, passes };
+  }
+
+  // ---------------------------------------------------------------- prix HDV
+  // nombres « 12 345 », « 1.234.567 », « 850 » ; le prix retenu est le plus grand nombre de la ligne
+  const NUM = /\d{1,3}(?:[ .,\u00a0\u202f]\d{3})+|\d+/g;
+  const clean = s => norm(s).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  async function parsePrices(passes) {
+    const items = (await W.allItems()).map(it => ({ ...it, n: clean(it.name) })).filter(it => it.n.length >= 3);
+    const votes = new Map();
+    const vote = (it, p) => { if (!votes.has(it.id)) votes.set(it.id, { it, ps: [] }); votes.get(it.id).ps.push(p); };
+    for (const lines of passes) {
+      let pending = null;
+      for (const raw of lines) {
+        const nums = [...raw.matchAll(NUM)].map(m => +m[0].replace(/\D/g, '')).filter(n => n > 0);
+        const text = clean(raw.replace(NUM, ' '));
+        let best = null;
+        if (text.length >= 3) {
+          for (const it of items) if (text.includes(it.n) && (!best || it.n.length > best.n.length)) best = it;
+          if (!best) {
+            let bd = Infinity;
+            for (const it of items) {
+              if (Math.abs(it.n.length - text.length) > 3) continue;
+              const d = lev(text, it.n);
+              if (d <= Math.max(1, Math.floor(it.n.length / 6)) && d < bd) { bd = d; best = it; }
+            }
+          }
+        }
+        if (best) {
+          if (nums.length) { vote(best, Math.max(...nums)); pending = null; } else pending = best;
+        } else if (pending && nums.length) { vote(pending, Math.max(...nums)); pending = null; }
+      }
+    }
+    return [...votes.values()].map(({ it, ps }) => {
+      const c = ps.reduce((m, p) => m.set(p, (m.get(p) || 0) + 1), new Map());
+      const [p, n] = [...c.entries()].sort((a, b) => b[1] - a[1])[0];
+      return { it, price: p, unsure: n < passes.length };
+    });
+  }
+
+  async function showPrices(res, url) {
+    const found = await parsePrices(res.passes);
+    const rows = found.map(f => {
+      const old = W.price(f.it.id);
+      return `<tr><td><label><input type="checkbox" data-pid="${f.it.id}" checked></label></td>
+        <td>${f.it.icon ? `<img src="${f.it.icon}" alt="">` : ''} ${esc(f.it.name)}</td>
+        <td class="old">${old ? old.toLocaleString('fr-FR') : '—'}</td>
+        <td><input type="number" min="0" data-pval="${f.it.id}" value="${f.price}" class="chg ${f.unsure ? 'unsure' : ''}">
+          ${f.unsure ? '<span class="warn" title="Lecture incertaine, vérifie">?</span>' : ''}</td></tr>`;
+    }).join('');
+    dlg.innerHTML = `
+      <form method="dialog">
+        <h3>Importer des prix HDV</h3>
+        <div class="imp-body">
+          <img src="${url}" alt="Capture" class="imp-shot">
+          <div class="imp-res">
+            <p class="imp-status">${found.length ? `${found.length} objet${found.length > 1 ? 's' : ''} reconnu${found.length > 1 ? 's' : ''}. Vérifie les prix (kamas par unité) :`
+              : 'Aucun objet reconnu. Essaie une capture plus nette de la liste de l’HDV (nom + prix visibles).'}</p>
+            ${found.length ? `<table><thead><tr><th></th><th>Objet</th><th>Actuel</th><th>Prix ₭</th></tr></thead><tbody>${rows}</tbody></table>` : ''}
+            <details><summary>Texte lu</summary><pre>${esc(res.text)}</pre></details>
+          </div>
+        </div>
+        <menu>
+          <button value="cancel" class="lnk">Annuler</button>
+          ${found.length ? '<button value="ok" class="gbtn" id="imp-ok">Enregistrer</button>' : ''}
+        </menu>
+      </form>`;
+    const ok = dlg.querySelector('#imp-ok');
+    if (ok) ok.onclick = e => {
+      e.preventDefault();
+      const map = {};
+      dlg.querySelectorAll('[data-pid]').forEach(c => { if (c.checked) map[c.dataset.pid] = dlg.querySelector(`[data-pval="${c.dataset.pid}"]`).value; });
+      W.setPrices(map);
+      dlg.close();
+      URL.revokeObjectURL(url);
+    };
   }
   W.recognizeScreenshot = recognize; // utile pour les tests
 
@@ -143,9 +220,10 @@
   function openHelp() {
     dlg.innerHTML = `
       <form method="dialog">
-        <h3>Importer mes niveaux</h3>
-        <p>Ouvre la fenêtre <b>Métiers</b> en jeu (touche <kbd>J</kbd>), fais une capture
-          (<kbd>Win</kbd>+<kbd>Maj</kbd>+<kbd>S</kbd>) puis <b>colle-la ici avec <kbd>Ctrl</kbd>+<kbd>V</kbd></b>.</p>
+        <h3>Importer une capture</h3>
+        <p>Fais une capture (<kbd>Win</kbd>+<kbd>Maj</kbd>+<kbd>S</kbd>) puis <b>colle-la ici avec <kbd>Ctrl</kbd>+<kbd>V</kbd></b> :</p>
+        <ul class="meta"><li><b>fenêtre Métiers</b> (touche <kbd>J</kbd>) → tes niveaux ;</li>
+          <li><b>Hôtel des ventes</b> (liste avec noms et prix) → les prix, gardés en mémoire.</li></ul>
         <label class="imp-drop" id="imp-drop">
           <input type="file" accept="image/*" hidden id="imp-file">
           <span>Ctrl+V, glisse une image ici ou clique pour choisir un fichier</span>
@@ -176,7 +254,8 @@
         if (m.status === 'pass') { status.textContent = 'Lecture du texte…'; prog.value = m.progress; }
         else if (/load/.test(m.status)) status.textContent = 'Chargement du moteur OCR (1re fois)…';
       });
-      showResult(res, url);
+      if (Object.keys(res.levels).length >= 2) showResult(res, url);
+      else { status.textContent = 'Recherche des objets et des prix…'; await showPrices(res, url); }
     } catch (e) {
       console.error(e);
       status.textContent = 'Échec de l’analyse : ' + e.message;

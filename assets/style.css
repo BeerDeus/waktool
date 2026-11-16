@@ -346,3 +346,14 @@ details.bmore[open] > summary { margin-bottom: 2px; }
 .tabs { flex: 1 1 0; min-width: 0; }
 .dd-menu { left: auto; right: 0; }
 @media (max-width: 700px) { .tabs { flex-basis: 100%; order: 5; } }
+
+/* prix HDV */
+.kph { color: var(--acc); font-weight: 600; }
+.pos { color: var(--ok); } .neg { color: var(--ko); }
+.plist.prices { max-height: 360px; overflow: auto; gap: 4px; }
+.prow { display: grid; grid-template-columns: 24px minmax(0, 1fr) 84px auto 54px; gap: 6px; align-items: center; font-size: 12.5px; }
+.prow img, .prow .noimg { width: 24px; height: 24px; }
+.prow span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow input { width: 100%; background: var(--card2); border: 1px solid var(--line); color: var(--txt); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12.5px; }
+.prow small { color: var(--mut); font-size: 10.5px; white-space: nowrap; }
+dialog.imp ul.meta { margin: 0 0 10px; padding-left: 18px; }

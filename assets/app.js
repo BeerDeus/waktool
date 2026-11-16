@@ -76,6 +76,20 @@
   };
   const sec = d => (Math.round(d * 10 + 1e-6) / 10).toFixed(1).replace('.', ',');
 
+  // ---------------------------------------------------------------- prix HDV (kamas / unité), par id d'objet
+  const PRICES = () => { try { return JSON.parse(store.get('prices')) || {}; } catch { return {}; } };
+  const price = id => { const p = PRICES()[id]; return p ? p[0] : null; };
+  function setPrices(map) {
+    const all = PRICES(), now = Date.now();
+    for (const [id, v] of Object.entries(map)) {
+      if (v === null || v === '' || isNaN(+v) || +v <= 0) delete all[id]; else all[id] = [Math.round(+v), now];
+    }
+    store.set('prices', JSON.stringify(all));
+  }
+  const fmtK = n => (n >= 1e6 ? (n / 1e6).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' M'
+    : n >= 1e4 ? Math.round(n / 1e3).toLocaleString('fr-FR') + ' k' : fmt(n)) + ' ₭';
+  const ago = ts => { const d = Math.floor((Date.now() - ts) / 864e5); return d <= 0 ? 'aujourd’hui' : d === 1 ? 'hier' : `il y a ${d} j`; };
+
   // ---------------------------------------------------------------- bonus actifs
   const sj = {
     get(k, d) { try { return { ...d, ...(JSON.parse(store.get(k)) || {}) }; } catch { return { ...d }; } },
@@ -236,9 +250,14 @@
         const raw = store.get('bonus.' + j.key);
         if (raw) (progress[j.key] ||= {}).bonus = bjob(j.key);
       });
-      return { levels, progress, prefs: { only: only.checked, bonuses: bg(), theme: curTheme(), pins: pins() } };
+      return { levels, progress, prices: PRICES(), prefs: { only: only.checked, bonuses: bg(), theme: curTheme(), pins: pins() } };
     },
     applyState(s) {
+      if (s.prices && typeof s.prices === 'object') {
+        const all = PRICES();
+        for (const [id, v] of Object.entries(s.prices)) if (Array.isArray(v) && (!all[id] || v[1] > all[id][1])) all[id] = v;
+        store.set('prices', JSON.stringify(all));
+      }
       if (s.prefs && Array.isArray(s.prefs.pins)) setPins(s.prefs.pins.filter(k => CRAFTS.some(c => c.key === k)));
       ALL.forEach(j => {
         const v = s.levels && s.levels[j.key];
@@ -267,6 +286,9 @@
     },
     onChange(f) { listeners.push(f); },
     jobs: () => ALL.map(j => ({ key: j.key, label: j.label, icon: j.icon, type: j.type })),
+    setPrices(map) { setPrices(map); render(); changed(); },
+    price,
+    allItems,
   };
 
   const icon = (it, cls = '') => it.icon
@@ -358,6 +380,8 @@
         x.innerHTML = m === 0 ? 'Plus d’XP (20 niveaux d’écart ou plus)'
           : `<b>${fmt(per)} XP</b> / action${m < 1 ? ` (${(m * 100).toLocaleString('fr-FR')} %)` : ''} · ${sec(dur(j.key, my - r.level, r))} s` +
             ` · <span title="Actions pour atteindre le niveau ${my + 1}">${fmt(nb)} actions → niv. ${my + 1}</span>`;
+        const main = (r.normal || [])[0], pm = main && price(main.id);
+        if (pm) x.innerHTML += ` · <span class="kph" title="${esc(main.name)} à ${fmt(pm)} ₭ : ${qtyStats(j).avg.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} par récolte">≈ ${fmtK(3600 / dur(j.key, my - r.level, r) * qtyStats(j).avg * pm)}/h</span>`;
         $('.res-body', n).append(x);
       }
       return n;
@@ -435,7 +459,7 @@
         <div><span>XP</span><b class="${xpb < 0 ? 'neg' : ''}">${xpb >= 0 ? '+' : ''}${xpb} %</b></div>
         <div><span>Quantité</span><b class="${q.pct < 0 ? 'neg' : ''}">${q.pct >= 0 ? '+' : ''}${+q.pct.toFixed(1)} %</b></div>
         <div><span>Par récolte</span><b>${q.min}–${q.max}</b><small>moy. ${q.avg.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}</small></div>
-        ${best ? `<div title="${esc(best.r.name)}, ${sec(best.d)} s par action"><span>Par heure*</span><b>${fmt(perH * q.avg)}</b><small>${fmt(perH * XP.per(my - best.r.level, xpb))} XP</small></div>` : ''}
+        ${best ? `<div title="${esc(best.r.name)}, ${sec(best.d)} s par action"><span>Par heure*</span><b>${fmt(perH * q.avg)}</b><small>${fmt(perH * XP.per(my - best.r.level, xpb))} XP${price((best.r.normal[0] || {}).id) ? ` · ${fmtK(perH * q.avg * price(best.r.normal[0].id))}` : ''}</small></div>` : ''}
       </div>
       <div class="bgrp"><h5>Bonus de région <small>(volontés du Maître de clan)</small></h5>
         <div class="region">${REGION.map(r => `
@@ -600,7 +624,7 @@
         <div class="res-body">
           <h3>${esc(it.name)}${r.res.qty > 1 ? ` ×${r.res.qty}` : ''} <span class="rar">${rar[0]}</span>${r.up ? ' <span class="upg" title="Amélioration de rareté">⬆ amélioration</span>' : ''}</h3>
           <div class="ings">${r.ing.map(i => ingChip(i)).join('')}</div>
-          <div class="xpline ${cls}">${xpl}</div>
+          <div class="xpline ${cls}">${xpl}${costHtml(r)}</div>
         </div></article>`;
     }).join('');
     list.innerHTML = html + (rows.length > recLimit
@@ -608,11 +632,27 @@
     const mb = $('#rec-more'); if (mb) mb.onclick = () => { recLimit += 200; renderRecipes(j); };
   }
 
+  // coût des ingrédients (prix connus) et marge si le prix du résultat est connu
+  function recipeCost(r) {
+    let cost = 0, missing = 0;
+    r.ing.forEach(i => { const p = price(i.item.id); if (p) cost += p * i.qty; else missing++; });
+    return { cost, missing, value: (price(r.res.item.id) || 0) * r.res.qty };
+  }
+  function costHtml(r) {
+    const c = recipeCost(r);
+    if (!c.cost && !c.value) return '';
+    const marge = c.value && !c.missing ? c.value - c.cost : null;
+    return ` · <span class="kph" title="${c.missing ? c.missing + ' ingrédient(s) sans prix' : 'tous les prix connus'}">coût ${c.missing ? '≥ ' : ''}${fmtK(c.cost)}</span>` +
+      (c.value ? ` · vente ${fmtK(c.value)}` : '') +
+      (marge !== null ? ` · <b class="${marge >= 0 ? 'pos' : 'neg'}">${marge >= 0 ? '+' : ''}${fmtK(marge)}</b>` : '');
+  }
+
   function ingChip(i, qty = i.qty) {
     const it = i.item;
     const tag = it.src ? `<button type="button" class="src" data-goto="${it.src.split(':')[0]}" data-q="${esc(it.name)}" title="Se récolte : ${esc(srcLabel(it.src))}">${esc(srcLabel(it.src))}</button>`
       : it.prod ? `<button type="button" class="src craft" data-goto="${it.prod[0]}" data-q="${esc(it.name)}" title="Se fabrique : ${esc(prodLabel(it.prod))}">⚒ ${esc(prodLabel(it.prod))}</button>` : '';
-    return `<span class="ing" style="--rar:${(RARITY[it.rarity] || RARITY[0])[1]}">${icon(it)}<b>${fmt(qty)}×</b> ${esc(it.name)} ${tag}</span>`;
+    const p = price(it.id);
+    return `<span class="ing" style="--rar:${(RARITY[it.rarity] || RARITY[0])[1]}">${icon(it)}<b>${fmt(qty)}×</b> ${esc(it.name)}${p ? ` <small class="kph" title="${fmt(p)} ₭ / u">${fmtK(p * qty)}</small>` : ''} ${tag}</span>`;
   }
   // clic sur la source d'un ingrédient : ouvre le métier concerné filtré sur l'objet
   document.addEventListener('click', e => {
@@ -767,7 +807,10 @@
         <label class="bchk"><input type="checkbox" id="withup" ${withUp ? 'checked' : ''}> Inclure les améliorations de rareté</label>
         <p class="psum">Niv. ${my} → <b>${tg}</b> : ${fmt(pl.xp)} XP · ${isFinite(pl.n) ? fmt(pl.n) + ' crafts' : 'aucune recette disponible'}</p>
         <h5>À crafter</h5><ul class="plist">${craftListHtml(pl.crafts)}</ul>
-        <h5>Liste de courses <small>(${ings.length} ingrédients)</small></h5>
+        <h5>Liste de courses <small>(${ings.length} ingrédients${(() => {
+          let c = 0, miss = 0; ings.forEach(o => { const p = price(o.item.id); if (p) c += p * o.n; else miss++; });
+          return c ? ` · ${miss ? '≥ ' : ''}${fmtK(c)}` : '';
+        })()})</small></h5>
         <ul class="plist shop">${ings.map(o => `<li>${ingChip({ item: o.item }, o.n)}</li>`).join('')}</ul>
         <p class="meta">XP des recettes = valeur de base du jeu (à confirmer en jeu). Pleine XP jusqu’à 10 niveaux sous le tien. Les ingrédients craftables ne sont pas détaillés.</p>`
         : '<p class="meta">Choisis un objectif supérieur à ton niveau.</p>'}`;
@@ -787,6 +830,35 @@
     box.querySelectorAll('[data-metric]').forEach(b => b.onclick = () => { store.set('metric.' + j.key, b.dataset.metric); upd(); });
     const wu = box.querySelector('#withup'); if (wu) wu.onchange = () => { store.set('withup.' + j.key, wu.checked ? '1' : '0'); upd(); };
     bindCollapsible();
+  }
+
+  function pricesHtml(j, my) {
+    const P = PRICES();
+    const rs = j.resources.filter(r => my === null || r.level <= my + 10);
+    const row = it => it && it.id ? `<label class="prow">${icon(it)}<span>${esc(it.name)}</span>
+      <input type="number" min="0" data-price="${it.id}" value="${P[it.id] ? P[it.id][0] : ''}" placeholder="—"> ₭
+      ${P[it.id] ? `<small title="${new Date(P[it.id][1]).toLocaleString('fr-FR')}">${ago(P[it.id][1])}</small>` : '<small></small>'}</label>` : '';
+    return `<p class="meta">Prix unitaire à l’Hôtel des ventes. Colle une capture de l’HDV (<kbd>Ctrl</kbd>+<kbd>V</kbd>) pour les remplir automatiquement.</p>
+      <div class="plist prices">${rs.map(r => row((r.normal || [])[0]) + row((r.rare || [])[0])).join('')}</div>`;
+  }
+  $('#side').addEventListener('change', e => {
+    const el = e.target.closest('[data-price]');
+    if (!el) return;
+    setPrices({ [el.dataset.price]: el.value });
+    renderList(); changed();
+    const box = $('#bonus-body'); if (box) box.innerHTML = bonusHtml(job());
+  });
+
+  // tous les objets connus (récoltes + ingrédients/résultats de toutes les recettes) pour l'OCR des prix
+  let allItemsP = null;
+  function allItems() {
+    allItemsP ||= Promise.all(ALL.map(j => loadRecipes(j.key))).then(list => {
+      const m = new Map();
+      D.jobs.forEach(j => j.resources.forEach(r => ['normal', 'rare', 'seed'].forEach(k => (r[k] || []).forEach(it => it.id && m.set(it.id, { id: it.id, name: it.name, icon: it.icon })))));
+      list.forEach(d => Object.values(d.items).forEach(it => m.has(it.id) || m.set(it.id, { id: it.id, name: it.name, icon: it.icon })));
+      return [...m.values()];
+    });
+    return allItemsP;
   }
 
   function refreshPlan() {
@@ -845,6 +917,7 @@
         <div id="prog-out">${progHtml(j, my)}</div>
       </div>
       <div class="box" id="plan" data-box="plan"><h4>Plan de montée</h4><div id="plan-out">${harvestPlanHtml(j, my) || '<p class="meta">Renseigne ton niveau et un objectif.</p>'}</div></div>
+      <div class="box" id="prices" data-box="prices"><h4>Prix HDV</h4>${pricesHtml(j, my)}</div>
       <div class="box" id="bonus" data-box="bonus"><h4>Bonus actifs</h4><div id="bonus-body">${bonusHtml(j)}</div></div>
       <div class="box" data-box="tools"><h4>Outils ${esc(j.label)}</h4>${tools}
         <p class="meta" style="margin:10px 0 0">Le niveau indiqué est celui de la recette (craft par le ${esc(j.label)}).</p></div>
