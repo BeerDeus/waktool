@@ -25,3 +25,8 @@ Sources : [MethodWakfu](https://methodwakfu.com/artisanat/localisation-des-resso
 Fenêtre Métiers en jeu (`J`) → capture → `Ctrl+V` sur le site (ou glisser-déposer / bouton « Importer une capture »).
 OCR 100 % local avec Tesseract.js (`vendor/tesseract/`, modèle `fra` compact) : 3 passes avec seuils différents + vote majoritaire ;
 les valeurs non unanimes sont signalées « ? » avant enregistrement.
+
+## Cache
+
+Le CDN Hostinger met en cache les assets : avant de committer une modif de `assets/` ou `data/`, lancer
+`python3 scripts/cachebust.py` (ajoute `?v=<hash>` dans `index.html`).
