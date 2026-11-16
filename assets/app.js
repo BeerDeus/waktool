@@ -10,6 +10,24 @@
 
   $('#ver').textContent = D.version ? `v${D.version}` : '';
 
+  // ---------------------------------------------------------------- thème (auto / clair / sombre)
+  const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
+  const themeBtn = $('#theme-btn');
+  function applyTheme(t) {
+    if (!THEMES[t]) t = 'auto';
+    if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+    themeBtn.textContent = THEMES[t][0];
+    themeBtn.title = THEMES[t][1] + ' — cliquer pour changer';
+    themeBtn.setAttribute('aria-label', THEMES[t][1]);
+  }
+  const curTheme = () => store.get('theme') || 'auto';
+  applyTheme(curTheme());
+  themeBtn.addEventListener('click', () => {
+    const order = ['auto', 'light', 'dark'];
+    const t = order[(order.indexOf(curTheme()) + 1) % 3];
+    store.set('theme', t); applyTheme(t); changed();
+  });
+
   // ---------------------------------------------------------------- XP métiers
   // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
   // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -132,6 +150,12 @@
   lvl.addEventListener('input', () => { store.set(lvlKey(), lvl.value); renderList(); renderSide(); renderTabs(); changed(); });
 
   function renderTabs() {
+    // ordre : niveau décroissant (métiers sans niveau à la fin, ordre d'origine sinon)
+    const idx = Object.fromEntries(D.jobs.map((j, i) => [j.key, i]));
+    const lv = k => { const v = store.get(lvlKey(k)); return v === null || v === '' ? -1 : +v; };
+    [...tabs.querySelectorAll('.tab')]
+      .sort((a, b) => lv(b.dataset.k) - lv(a.dataset.k) || idx[a.dataset.k] - idx[b.dataset.k])
+      .forEach(b => tabs.append(b));
     tabs.querySelectorAll('.tab').forEach(b => {
       const v = store.get(lvlKey(b.dataset.k));
       let s = b.querySelector('.tlvl');
@@ -161,7 +185,7 @@
         const raw = store.get('bonus.' + j.key);
         if (raw) (progress[j.key] ||= {}).bonus = bjob(j.key);
       });
-      return { levels, progress, prefs: { only: only.checked, bonuses: bg() } };
+      return { levels, progress, prefs: { only: only.checked, bonuses: bg(), theme: curTheme() } };
     },
     applyState(s) {
       D.jobs.forEach(j => {
@@ -172,6 +196,7 @@
         only.checked = s.prefs.only;
         store.set('only', only.checked ? '1' : '0');
       }
+      if (s.prefs && THEMES[s.prefs.theme]) { store.set('theme', s.prefs.theme); applyTheme(s.prefs.theme); }
       if (s.prefs && s.prefs.bonuses && typeof s.prefs.bonuses === 'object') sj.set('bonus.global', { ...G_DEF, ...s.prefs.bonuses });
       else if (s.prefs && s.prefs.bonus === 30 && !store.get('bonus.global')) sj.set('bonus.global', { ...G_DEF, region: 30 });
       Object.entries(s.progress || {}).forEach(([k, o]) => {

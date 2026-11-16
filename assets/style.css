@@ -12,6 +12,7 @@
   --r: 12px;
   color-scheme: dark;
 }
+/* thème clair : auto (système) ou forcé via data-theme="light" ; data-theme="dark" force le sombre */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --bg: #f3f0e8;
@@ -21,8 +22,24 @@
     --line: #ddd4c1;
     --txt: #1f2a30;
     --mut: #66737c;
+    --ok: #2f8f4e;
+    --ko: #c2453a;
+    --acc: #b8860b;
     color-scheme: light;
   }
+}
+:root[data-theme="light"] {
+    --bg: #f3f0e8;
+    --bg2: #ebe6da;
+    --card: #fffdf8;
+    --card2: #f6f1e5;
+    --line: #ddd4c1;
+    --txt: #1f2a30;
+    --mut: #66737c;
+    --ok: #2f8f4e;
+    --ko: #c2453a;
+    --acc: #b8860b;
+    color-scheme: light;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -258,3 +275,14 @@ details.bmore[open] > summary { margin-bottom: 2px; }
 .box[data-box].collapsed > h4 { margin-bottom: 0; }
 .box[data-box].collapsed > h4::after { transform: rotate(-90deg); }
 .box[data-box].collapsed > :not(h4) { display: none; }
+
+/* bouton thème */
+.theme-btn {
+  width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer; flex: none;
+  border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--txt); font-size: 16px;
+}
+.theme-btn:hover { border-color: var(--mut); }
+
+/* vignettes d'apparence : fond blanc des images fondu dans une tuile claire (lisible dans les 2 thèmes) */
+.res-app { background: #ece6d8; }
+.res-app img { mix-blend-mode: multiply; }

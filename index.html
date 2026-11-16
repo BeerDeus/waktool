@@ -6,7 +6,11 @@
   <title>Waktool · Métiers de récolte</title>
   <meta name="description" content="Wakfu : zones de récolte, niveaux, outils, familiers et consommables pour chaque métier de récolte.">
   <link rel="icon" href="img/jobs/paysan.png">
-  <link rel="stylesheet" href="assets/style.css?v=38d3a110">
+  <script>
+    // thème appliqué avant le rendu (évite le flash)
+    try { const t = localStorage.getItem('waktool.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="assets/style.css?v=9f6532b7">
 </head>
 <body>
   <header class="top">
@@ -19,6 +23,7 @@
     </div>
     <nav id="tabs" class="tabs" role="tablist"></nav>
     <div id="account" class="account"></div>
+    <button id="theme-btn" class="theme-btn" type="button"></button>
   </header>
 
   <main class="layout">
@@ -59,7 +64,7 @@
   </template>
 
   <script src="data/metiers.js?v=18b957f8"></script>
-  <script src="assets/app.js?v=208768eb"></script>
+  <script src="assets/app.js?v=36c70f36"></script>
   <script src="assets/import.js?v=c8a68727"></script>
   <script type="module" src="assets/auth.js?v=339c5af2"></script>
 </body>
