@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waktool · Métiers de récolte</title>
+  <meta name="description" content="Wakfu : zones de récolte, niveaux, outils, familiers et consommables pour chaque métier de récolte.">
+  <link rel="icon" href="img/jobs/paysan.png">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo">W</span>
+      <div>
+        <h1>Waktool</h1>
+        <p>Métiers de récolte Wakfu</p>
+      </div>
+    </div>
+    <nav id="tabs" class="tabs" role="tablist"></nav>
+  </header>
+
+  <main class="layout">
+    <section class="main">
+      <div class="job-head" id="job-head"></div>
+      <div class="filters">
+        <label class="search">
+          <input id="q" type="search" placeholder="Rechercher une ressource, une zone…" autocomplete="off">
+        </label>
+        <label class="lvl">
+          Mon niveau <input id="lvl" type="number" min="0" max="200" step="1" placeholder="—">
+        </label>
+        <label class="chk"><input id="only" type="checkbox"> Récoltable seulement</label>
+      </div>
+      <div id="list" class="list"></div>
+    </section>
+
+    <aside class="side" id="side"></aside>
+  </main>
+
+  <footer class="foot">
+    <p>Données : <a href="https://methodwakfu.com/artisanat/localisation-des-ressources/" target="_blank" rel="noopener">MethodWakfu</a>,
+      gamedata Ankama <span id="ver"></span>, <a href="https://wakfu.wiki.gg" target="_blank" rel="noopener">Wakfu Wiki</a>.
+      Images © Ankama. Site non officiel.</p>
+  </footer>
+
+  <template id="tpl-res">
+    <article class="res">
+      <div class="res-lvl"></div>
+      <div class="res-app"></div>
+      <div class="res-body">
+        <h3></h3>
+        <ul class="zones"></ul>
+        <div class="drops"></div>
+      </div>
+    </article>
+  </template>
+
+  <script src="data/metiers.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
