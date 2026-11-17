@@ -1,12 +1,12 @@
 // Waktool — module main
-import { st } from './state.js?v=8bfcdbf8';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=8bfcdbf8';
-import { ALL, CRAFTS, HARVEST, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=8bfcdbf8';
-import { renderSide } from './side.js?v=8bfcdbf8';
-import { only, renderJobCard, renderMetiers } from './metiers.js?v=8bfcdbf8';
-import { renderProfit } from './profit.js?v=8bfcdbf8';
-import { renderZones } from './zones.js?v=8bfcdbf8';
-import { renderSession, sess } from './session.js?v=8bfcdbf8';
+import { st } from './state.js?v=aec81dce';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=aec81dce';
+import { ALL, CRAFTS, HARVEST, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=aec81dce';
+import { renderSide } from './side.js?v=aec81dce';
+import { only, renderJobCard, renderMetiers } from './metiers.js?v=aec81dce';
+import { renderProfit } from './profit.js?v=aec81dce';
+import { renderZones } from './zones.js?v=aec81dce';
+import { renderSession, sess } from './session.js?v=aec81dce';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');
@@ -175,6 +175,7 @@ window.waktool = {
     renderAll();
   },
   setLevels(levels) { this.applyState({ levels }); changed(); },
+  setXp(key, xp) { store.set('xp.' + key, String(xp)); renderAll(); changed(); },
   onChange(f) { listeners.push(f); },
   jobs: () => ALL.map(j => ({ key: j.key, label: j.label, icon: j.icon, type: j.type })),
   setPrices(map) { setPrices(map); renderPage(); if (st.page === 'metiers') renderJobCard(job()); changed(); },

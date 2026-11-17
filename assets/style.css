@@ -461,3 +461,5 @@ dialog.imp ul.meta { margin: 0 0 10px; padding-left: 18px; }
 .zr.locked { opacity: .4; border-style: dashed; }
 .zr.sample { padding: 0 7px; font-size: 11.5px; }
 @media (max-width: 640px) { .zgrid { grid-template-columns: 1fr; } }
+.imp-xp { margin: 10px 0 0; font-size: 14px; }
+.imp-xp input { width: 90px; }

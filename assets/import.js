@@ -83,28 +83,96 @@
 
   const DIGIT_FIX = { o: '0', O: '0', D: '0', Q: '0', l: '1', I: '1', '|': '1', i: '1', '!': '1', S: '5', s: '5', B: '8', Z: '2', z: '2', g: '9', G: '6' };
 
-  function parseLevels(lines) {
-    const found = {};
-    for (const raw of lines) {
-      const t = norm(raw).replace(/[^a-z0-9.|!' ]/g, ' ');
-      // métier : un mot (ou deux mots accolés, ex. « Maître d'Armes ») proche d'un nom de métier
-      let best = null;
-      const ws = t.split(/\s+/).map(w => w.replace(/[^a-z]/g, '')).filter(Boolean);
-      const cands = [...ws, ...ws.slice(1).map((w, i) => ws[i] + w), ...ws.slice(2).map((w, i) => ws[i] + ws[i + 1] + w)];
-      for (const w of cands.filter(w => w.length >= 4)) {
-        for (const j of JOBS) {
-          const d = lev(w, j.n);
-          if (d <= Math.max(1, Math.floor(j.n.length / 4)) && (!best || d < best.d)) best = { j, d };
+  // Niveaux de la fenêtre Métiers, lus sur les mots positionnés de l'OCR :
+  // nom de métier (1 à 3 mots accolés, ex. « Maître d'Armes ») suivi de « Niv. N ».
+  // Seuls les « Niv. » situés dans la colonne des niveaux de la liste des métiers sont gardés
+  // (sinon un « Niv. 0 » de recette du panneau de droite serait attribué au métier voisin).
+  const LVL_RE = /^n[il1|!][vuy][.,:]?([0-9oODQlI|i!SsBZzgG]{1,3})?[.,]?$/i;
+  const NUM_RE = /^([0-9oODQlI|i!SsBZzgG]{1,3})[.,]?$/;
+  const fixDigits = v => parseInt(v.replace(/./g, ch => DIGIT_FIX[ch] ?? ch), 10);
+  function matchJob(name) {
+    if (name.length < 4) return null;
+    let best = null;
+    for (const j of JOBS) {
+      const d = lev(name, j.n);
+      if (d <= Math.max(1, Math.floor(j.n.length / 4)) && (!best || d < best.d)) best = { j, d };
+    }
+    return best;
+  }
+  function parseLevelCands(wlines) {
+    const cands = [];
+    for (const ws of wlines) {
+      const toks = ws.map(w => ({ ...w, n: norm(w.t).replace(/[^a-z]/g, '') }));
+      for (let i = 0; i < toks.length; i++) {
+        let hit = null;
+        for (const span of [3, 2, 1]) {
+          if (i + span > toks.length) continue;
+          const m = matchJob(toks.slice(i, i + span).map(t => t.n).join(''));
+          if (m && (!hit || m.d < hit.m.d)) hit = { m, span };
         }
+        if (!hit) continue;
+        // « Niv. N » dans les 2 mots suivants (tolère un mot parasite)
+        for (let k = i + hit.span; k < Math.min(toks.length, i + hit.span + 2); k++) {
+          const m = toks[k].t.match(LVL_RE);
+          if (!m) continue;
+          const v = m[1] ?? ((toks[k + 1] && toks[k + 1].t.match(NUM_RE)) || [])[1];
+          const lvl = v == null ? NaN : fixDigits(v);
+          // niveaux alignés à droite dans le jeu : on repère la colonne par le bord droit du nombre
+          const xr = m[1] != null ? toks[k].x1 : (toks[k + 1] || toks[k]).x1;
+          if (Number.isFinite(lvl) && lvl >= 0 && lvl <= 250) cands.push({ key: hit.m.j.key, lvl, x: xr, harvest: ALLJ.find(x => x.key === hit.m.j.key).type === 'harvest', jx: toks[i].x0, jy: toks[i].y0 });
+          break;
+        }
+        i += hit.span - 1;
       }
-      if (!best) continue;
-      // niveau : "Niv. 14" (tolérant aux confusions OCR), sinon nombre en fin de ligne
-      const m = raw.match(/n[il1|!][vuy]\s*[.,:]?\s*([0-9oODQlI|i!SsBZzgG]{1,3})/i) || raw.match(/([0-9]{1,3})\s*$/);
-      if (!m) continue;
-      const lvl = parseInt(m[1].replace(/./g, ch => DIGIT_FIX[ch] ?? ch), 10);
-      if (Number.isFinite(lvl) && lvl >= 0 && lvl <= 250 && !(best.j.key in found)) found[best.j.key] = lvl;
+    }
+    return cands;
+  }
+  function parseLevels(wlines, width) {
+    const cands = parseLevelCands(wlines);
+    const xs = cands.filter(c => c.harvest).map(c => c.x).sort((a, b) => a - b);
+    const col = xs.length ? xs[Math.floor(xs.length / 2)] : null;
+    const found = {};
+    for (const c of cands) {
+      if (col !== null && Math.abs(c.x - col) > 0.045 * width) continue;
+      if (!(c.key in found)) found[c.key] = c.lvl;
     }
     return found;
+  }
+
+  // XP actuelle (fenêtre de détail d'un métier, bulle « 1 633/2 475 ») : le dénominateur vaut 150 × niveau + 75,
+  // ce qui donne le niveau exact et écarte les fausses lectures ; le métier est celui dont le nom est le plus proche.
+  function parseXp(wlines, levels) {
+    for (const ws of wlines) {
+      const line = ws.map(w => w.t).join(' ');
+      const m = line.match(/(\d[\d  ]{0,7}?)\s*\/\s*(\d{1,3}(?:[  ]?\d{3})*)(?!\d)/);
+      if (!m) continue;
+      const num = +m[1].replace(/\D/g, ''), den = +m[2].replace(/\D/g, '');
+      const L = (den - 75) / 150;
+      if (!Number.isInteger(L) || L < 0 || L > 250 || num >= den) continue;
+      const fw = ws.find(w => /\//.test(w.t)) || ws[ws.length - 1];
+      let key = null;
+      const same = Object.entries(levels).filter(([, v]) => v === L).map(([k]) => k);
+      if (same.length === 1) key = same[0];
+      else {
+        // nom de métier le plus proche de la fraction (en-tête du panneau de détail)
+        let bd = Infinity;
+        for (const c of parseLevelCands(wlines).concat(jobNames(wlines))) {
+          if (same.length && !same.includes(c.key)) continue;
+          const d = Math.hypot(c.jx - fw.x0, c.jy - fw.y0);
+          if (d < bd) { bd = d; key = c.key; }
+        }
+      }
+      if (key) return { key, level: L, xp: num };
+    }
+    return null;
+  }
+  function jobNames(wlines) {
+    const out = [];
+    for (const ws of wlines) ws.forEach(w => {
+      const m = matchJob(norm(w.t).replace(/[^a-z]/g, ''));
+      if (m) out.push({ key: m.j.key, jx: w.x0, jy: w.y0 });
+    });
+    return out;
   }
 
   // 3 passes (prétraitements différents) + vote majoritaire par métier
@@ -124,7 +192,8 @@
       if (!lines.length) lines = data.text.split('\n');
       if (!text) text = lines.join('\n');
       passes.push(lines);
-      for (const [k, v] of Object.entries(parseLevels(lines))) (votes[k] ||= []).push(v);
+      const wl = (data.lines || []).map(l => (l.words || []).map(wd => ({ t: wd.text, x0: wd.bbox.x0, x1: wd.bbox.x1, y0: wd.bbox.y0, y1: wd.bbox.y1 })));
+      for (const [k, v] of Object.entries(parseLevels(wl, bmp.width * Math.max(1, Math.min(4, 1400 / Math.max(bmp.width, bmp.height)))))) (votes[k] ||= []).push(v);
       onProgress && onProgress({ status: 'pass', progress: (i + 1) / PASSES.length });
     }
     const levels = {}, unsure = [];
@@ -135,7 +204,11 @@
       if (n < PASSES.length) unsure.push(k);
     }
     const scale = Math.max(1, Math.min(4, 1400 / Math.max(bmp.width, bmp.height)));
-    return { levels, unsure, text, passes, wordsPasses, bmp, scale };
+    // XP actuelle : première passe qui lit une fraction valide
+    let xp = null;
+    for (const wl of wordsPasses) { xp = parseXp(wl, levels); if (xp) break; }
+    if (xp && levels[xp.key] === undefined) levels[xp.key] = xp.level;
+    return { levels, unsure, text, passes, wordsPasses, bmp, scale, xp };
   }
 
   // ---------------------------------------------------------------- prix HDV
@@ -332,7 +405,7 @@
         if (m.status === 'pass') { status.textContent = 'Lecture du texte…'; prog.value = m.progress; }
         else if (/load/.test(m.status)) status.textContent = 'Chargement du moteur OCR (1re fois)…';
       });
-      if (Object.keys(res.levels).length >= 2) showResult(res, url);
+      if (Object.keys(res.levels).length >= 2 || res.xp) showResult(res, url);
       else { status.textContent = 'Recherche des objets et des prix…'; await showPrices(res, url); }
     } catch (e) {
       console.error(e);
@@ -367,6 +440,8 @@
             <p class="imp-status">${n ? `${n} métier${n > 1 ? 's' : ''} détecté${n > 1 ? 's' : ''}. Vérifie et corrige si besoin :`
               : 'Aucun niveau détecté. Saisis-les à la main ou essaie une capture plus nette.'}</p>
             <table><thead><tr><th>Métier</th><th>Actuel</th><th>Importé</th></tr></thead><tbody>${rows}</tbody></table>
+            ${res.xp ? `<p class="imp-xp">XP actuelle · <b>${esc(ALLJ.find(x => x.key === res.xp.key).label)} niv. ${res.xp.level}</b> :
+              <input type="number" min="0" id="imp-xpv" value="${res.xp.xp}" class="chg"> / ${(150 * res.xp.level + 75).toLocaleString('fr-FR')} XP</p>` : ''}
             <details><summary>Texte lu</summary><pre>${esc(res.text)}</pre></details>
           </div>
         </div>
@@ -379,8 +454,10 @@
     dlg.querySelector('#imp-ok').onclick = e => {
       e.preventDefault();
       const levels = {};
-      dlg.querySelectorAll('input[type=number]').forEach(i => { if (i.value !== '') levels[i.name] = +i.value; });
+      dlg.querySelectorAll('input[type=number][name]').forEach(i => { if (i.value !== '') levels[i.name] = +i.value; });
       W.setLevels(levels);
+      const xv = dlg.querySelector('#imp-xpv');
+      if (res.xp && xv && xv.value !== '') W.setXp(res.xp.key, +xv.value);
       dlg.close();
       URL.revokeObjectURL(url);
     };
