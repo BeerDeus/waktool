@@ -554,7 +554,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 .flash-ok { border: 0; border-radius: 999px; padding: 9px 20px; background: #111; color: #fff; font-weight: 800; cursor: pointer; }
 @keyframes flash-in { from { transform: translate(-50%, -30px); opacity: 0; } }
 body.pulse::after, body.pulse-big::after { content: ''; position: fixed; inset: 0; z-index: 59; pointer-events: none; opacity: 0;
-  box-shadow: inset 0 0 0 10px var(--c), inset 0 0 80px color-mix(in srgb, var(--c) 60%, transparent); animation: edge-pulse 1s ease-in-out infinite; }
+  box-shadow: inset 0 0 0 10px var(--c), inset 0 0 80px color-mix(in srgb, var(--c) 60%, transparent); animation: edge-pulse 1s ease-in-out 5; }
 body.pulse-big::after { box-shadow: inset 0 0 0 16px var(--ok), inset 0 0 140px color-mix(in srgb, var(--ok) 70%, transparent); }
 @keyframes edge-pulse { 50% { opacity: 1; } }
 .flash.full { inset: 0; top: 0; left: 0; transform: none; width: auto; border-radius: 0; flex-direction: column; justify-content: center; text-align: center; gap: 28px;
@@ -569,7 +569,7 @@ body.pulse-big::after { box-shadow: inset 0 0 0 16px var(--ok), inset 0 0 140px 
 .flash.edge .flash-txt span { font-size: 13.5px; }
 @keyframes flash-fade { from { opacity: 0; } }
 @keyframes flash-up { from { transform: translate(-50%, 30px); opacity: 0; } }
-body.pulse-card .hero { animation: card-pulse 1s ease-in-out infinite; }
+body.pulse-card .hero { animation: card-pulse 1s ease-in-out 5; }
 @keyframes card-pulse { 50% { box-shadow: 0 0 0 4px var(--c), 0 0 40px color-mix(in srgb, var(--c) 60%, transparent); } }
 @media (prefers-reduced-motion: reduce) { body.pulse::after, body.pulse-big::after { animation: none; opacity: .7; } .flash { animation: none; } }
 .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 50; display: grid; gap: 8px; max-width: min(360px, calc(100vw - 32px)); }

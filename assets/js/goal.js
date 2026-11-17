@@ -1,13 +1,13 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=741d8fd4';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=741d8fd4';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, xpOf } from './model.js?v=741d8fd4';
-import { renderTabs } from './main.js?v=741d8fd4';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=741d8fd4';
-import { flash, initAudio } from './alert.js?v=741d8fd4';
+import { st } from './state.js?v=cbdf641d';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=cbdf641d';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, xpOf } from './model.js?v=cbdf641d';
+import { renderTabs } from './main.js?v=cbdf641d';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=cbdf641d';
+import { flash, initAudio } from './alert.js?v=cbdf641d';
 
 // ================================================================ état : objectif + sac
-const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'banner', t: 0 };
+const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', t: 0 };
 const goal = () => sj.get('goal', GOAL_DEF);
 const setGoal = o => sj.set('goal', { ...goal(), ...o, t: Date.now() });
 // sac : { t, items: { nom: quantité } } — mis à jour par le journal du chat, corrigé à la main (ventes, coffre…)
@@ -164,7 +164,7 @@ function heroHtml(c, gd) {
         <label class="chk"><input type="checkbox" data-g="craft" ${c.g.craft ? 'checked' : ''}> Crafter quand ça accélère (fils…)</label>
         <label class="chk" title="Temps moyen pour aller d’un spot de récolte à un autre : plus il est long, moins le plan te fait changer de cible">Trajet entre 2 spots <input type="number" min="0" max="60" data-g="travel" value="${+c.g.travel || 0}"> min</label>
         <label class="chk">XP actuelle <input type="number" min="0" data-g="xp" value="${c.x}"></label>
-        <label class="chk">Alertes <select data-g="alert">${[['banner', 'Bandeau en haut'], ['full', 'Plein écran'], ['edge', 'Discrètes (bord + carte)']].map(([v, l]) => `<option value="${v}" ${c.g.alert === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="chk">Alertes <select data-g="alert">${[['edge', 'Barre en bas (discrète)'], ['banner', 'Bandeau en haut'], ['full', 'Plein écran']].map(([v, l]) => `<option value="${v}" ${c.g.alert === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <button type="button" class="lnk" data-g="test-alert">Tester l’alerte</button>
       </details>
     </div>

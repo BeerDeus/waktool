@@ -1,5 +1,5 @@
 // Waktool — alertes visibles à l'écran (pas de notifications système) : gros bandeau + bord qui pulse + son
-import { $, esc, sj } from './util.js?v=741d8fd4';
+import { $, esc, sj } from './util.js?v=cbdf641d';
 
 const soundOn = () => sj.get('chat', { sound: true }).sound;
 let actx = null;
@@ -44,9 +44,11 @@ function blinkTitle(msg) {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && blinkT) { clearInterval(blinkT); blinkT = null; document.title = BASE_TITLE; } });
 
 // alerte importante : bord de l'écran qui pulse + son, et selon le style choisi (page Objectif > Réglages) :
-//   banner = bandeau en haut (reste jusqu'au clic sur OK) ; full = plein écran ; edge = discrète (petite carte en bas + carte « Prochaine action » qui clignote)
+//   edge = discrète (barre en bas, se ferme seule après 15 s ; par défaut) ; banner = bandeau en haut ; full = plein écran
+// Le bord de l'écran clignote 5 s au plus.
 let pulseT = null, autoT = null;
-const alertStyle = () => sj.get('goal', { alert: 'banner' }).alert || 'banner';
+const PULSE_MS = 5000;
+const alertStyle = () => sj.get('goal', { alert: 'edge' }).alert || 'edge';
 function flash(title, body = '', { big = false, sound = true } = {}) {
   const style = big ? (alertStyle() === 'edge' ? 'banner' : alertStyle()) : alertStyle();
   let el = $('#flash');
@@ -64,7 +66,7 @@ function flash(title, body = '', { big = false, sound = true } = {}) {
   void b.offsetWidth; // relance l'animation
   b.classList.add(big ? 'pulse-big' : 'pulse');
   if (style === 'edge') b.classList.add('pulse-card');
-  clearTimeout(pulseT); pulseT = setTimeout(() => b.classList.remove('pulse', 'pulse-big', 'pulse-card'), big ? 20000 : 10000);
+  clearTimeout(pulseT); pulseT = setTimeout(() => b.classList.remove('pulse', 'pulse-big', 'pulse-card'), PULSE_MS); // 5 s de clignotement max
   clearTimeout(autoT);
   if (style === 'edge') autoT = setTimeout(dismissFlash, 15000);
   if (sound) beep(big);

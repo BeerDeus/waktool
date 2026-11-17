@@ -153,6 +153,7 @@ test('assistant : la prochaine action suit le sac, s’adapte à l’XP réelle 
   await expect(page.locator('#flash')).toContainText('Assez de Pied de Boufton');
   await expect(page.locator('#flash')).toContainText('Passe à Fleur de Rhodon');
   await expect(page.locator('body')).toHaveClass(/pulse/);
+  await expect(page.locator('body')).not.toHaveClass(/pulse/, { timeout: 7000 }); // 5 s de clignotement max
   await page.click('[data-flash-x]');
   await expect(page.locator('#flash')).toBeHidden();
   // objectif atteint : grosse alerte

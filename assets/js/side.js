@@ -1,9 +1,9 @@
 // Waktool — module side
-import { st } from './state.js?v=741d8fd4';
-import { $, changed, esc, fmt, fmt1, fmtK, sec, sj, store } from './util.js?v=741d8fd4';
-import { HARVEST, REGION, XP, activeTool, bestAt, bg, bjob, bonusXp, climate, levelOf, price, qtyStats } from './model.js?v=741d8fd4';
-import { renderJobCard } from './metiers.js?v=741d8fd4';
-import { job, renderPage } from './main.js?v=741d8fd4';
+import { st } from './state.js?v=cbdf641d';
+import { $, changed, esc, fmt, fmt1, fmtK, sec, sj, store } from './util.js?v=cbdf641d';
+import { HARVEST, REGION, XP, activeTool, bestAt, bg, bjob, bonusXp, climate, levelOf, price, qtyStats } from './model.js?v=cbdf641d';
+import { renderJobCard } from './metiers.js?v=cbdf641d';
+import { job, renderPage } from './main.js?v=cbdf641d';
 // ================================================================ panneau Bonus (colonne de droite)
 const chk = (id, on, label, extra = '') => `<label class="bchk"><input type="checkbox" data-b="${id}" ${on ? 'checked' : ''}> ${label}${extra}</label>`;
 const selB = (id, val, opts) => `<select data-b="${id}">${opts.map(([v, l]) => `<option value="${v}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
