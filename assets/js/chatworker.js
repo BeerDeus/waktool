@@ -1,5 +1,6 @@
 // Waktool — lecture en continu de wakfu_chat.log (worker : pas ralenti quand l'onglet est en arrière-plan)
-// Reçoit un FileSystemFileHandle, relit uniquement la fin du fichier chaque seconde et renvoie les lignes complètes.
+// Mode fichier : reçoit un FileSystemFileHandle, relit uniquement la fin du fichier chaque seconde et renvoie les lignes complètes.
+// Mode pont : envoie juste un « tick » par seconde (la page interroge alors le pont local).
 const FIRST_MAX = 5e6; // à la liaison : on relit au plus les 5 derniers Mo
 let h = null, off = 0, rest = '', dec = new TextDecoder('utf-8'), busy = false, iv = null;
 
@@ -30,6 +31,9 @@ onmessage = async e => {
   if (m.cmd === 'start') {
     h = m.handle; off = 0; rest = ''; dec = new TextDecoder('utf-8');
     await poll(true);
-    iv = setInterval(poll, 1000);
+    if (h === m.handle) iv = setInterval(poll, 1000);
+  } else if (m.cmd === 'tick') {
+    h = null;
+    iv = setInterval(() => postMessage({ type: 'tick' }), m.ms || 1000);
   } else if (m.cmd === 'stop') h = null;
 };

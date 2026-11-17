@@ -1,13 +1,13 @@
 // Waktool — module main
-import { st } from './state.js?v=ce18e5b8';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=ce18e5b8';
-import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=ce18e5b8';
-import { renderSide } from './side.js?v=ce18e5b8';
-import { only, xponly, renderJobCard, renderMetiers } from './metiers.js?v=ce18e5b8';
-import { renderProfit } from './profit.js?v=ce18e5b8';
-import { renderZones } from './zones.js?v=ce18e5b8';
-import { renderSession, sess } from './session.js?v=ce18e5b8';
-import { feed as chatFeed } from './chatlog.js?v=ce18e5b8';
+import { st } from './state.js?v=741d8fd4';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=741d8fd4';
+import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=741d8fd4';
+import { renderSide } from './side.js?v=741d8fd4';
+import { only, xponly, renderJobCard, renderMetiers } from './metiers.js?v=741d8fd4';
+import { renderProfit } from './profit.js?v=741d8fd4';
+import { renderZones } from './zones.js?v=741d8fd4';
+import { goal, bag, renderObjectif, goalCtx, goalGuide } from './goal.js?v=741d8fd4';
+import { feed as chatFeed } from './chatlog.js?v=741d8fd4';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');
@@ -41,10 +41,10 @@ installBtn.addEventListener('click', async () => {
 });
 
 // ================================================================ état / navigation
-const PAGES = ['metiers', 'rentabilite', 'zones', 'session'];
+const PAGES = ['metiers', 'rentabilite', 'zones', 'objectif'];
 st.cur = store.get('job') || HARVEST[0].key;
 {
-  const h = location.hash.slice(1);
+  const h = location.hash.slice(1) === 'session' ? 'objectif' : location.hash.slice(1); // ancienne page Session
   if (PAGES.includes(h)) st.page = h; else if (getJob(h)) st.cur = h;
 }
 if (!getJob(st.cur)) st.cur = HARVEST[0].key;
@@ -82,8 +82,7 @@ function togglePin(k) {
 }
 function renderTabs() {
   const p = pins();
-  const harvestOnly = st.page === 'session';
-  const shown = ALL.filter(j => j.type === 'harvest' || (!harvestOnly && (p.includes(j.key) || j.key === st.cur)));
+  const shown = ALL.filter(j => j.type === 'harvest' || p.includes(j.key) || j.key === st.cur);
   const idx = Object.fromEntries(ALL.map((j, i) => [j.key, i]));
   const lv = k => levelOf(k) ?? -1;
   shown.sort((a, b) => lv(b.key) - lv(a.key) || idx[a.key] - idx[b.key]);
@@ -95,7 +94,6 @@ function renderTabs() {
       ${j.type === 'craft' ? `<span class="pinx" data-unpin="${j.key}" title="${tmp ? 'Épingler en onglet' : 'Retirer des onglets'}">${tmp ? '📌' : '×'}</span>` : ''}
     </button>`;
   }).join('');
-  $('#crafts-dd').hidden = harvestOnly;
   ddMenu.innerHTML = CRAFTS.map(c => {
     const v = levelOf(c.key);
     return `<div class="dd-item ${c.key === st.cur ? 'on' : ''}" data-k="${c.key}" style="--c:${c.color}">
@@ -116,13 +114,12 @@ document.addEventListener('click', () => { ddMenu.hidden = true; });
 
 // ================================================================ rendu global
 function renderAll() {
-  if (st.page === 'session') { const s = sess(); if ((s.start || s.acc || s.real) && getJob(s.job)) st.cur = s.job; } // session en cours : son métier
   const j = job();
-  document.documentElement.style.setProperty('--c', st.page === 'metiers' || st.page === 'session' ? j.color : '#e6b84a');
+  document.documentElement.style.setProperty('--c', st.page === 'metiers' ? j.color : '#e6b84a');
   $('#mainnav').querySelectorAll('[data-page]').forEach(b => b.setAttribute('aria-current', b.dataset.page === st.page ? 'page' : 'false'));
   PAGES.forEach(p => { $('#page-' + p).hidden = p !== st.page; });
-  $('#jobbar').hidden = st.page === 'rentabilite' || st.page === 'zones';
-  if (st.page === 'session' && j.type !== 'harvest') { st.cur = HARVEST.slice().sort((a, b) => (levelOf(b.key) ?? -1) - (levelOf(a.key) ?? -1))[0].key; }
+  if (st.page !== 'objectif') document.body.classList.remove('obj-compact');
+  $('#jobbar').hidden = st.page !== 'metiers';
   renderTabs();
   renderPage();
 }
@@ -130,7 +127,7 @@ function renderPage() {
   if (st.page === 'metiers') renderMetiers();
   else if (st.page === 'rentabilite') renderProfit();
   else if (st.page === 'zones') renderZones();
-  else renderSession();
+  else renderObjectif();
   renderSide();
 }
 
@@ -148,7 +145,7 @@ window.waktool = {
       if (Object.keys(o).length) progress[j.key] = o;
     });
     return { levels, progress, prices: PRICES(), phist: jget('phist', {}) || {},
-      prefs: { only: only.checked, xponly: xponly.checked, bonuses: bg(), theme: curTheme(), pins: pins(), sessions: jget('sessions', []) || [] } };
+      prefs: { only: only.checked, xponly: xponly.checked, bonuses: bg(), theme: curTheme(), pins: pins(), goal: goal(), stock: bag() } };
   },
   applyState(s) {
     if (s.phist && typeof s.phist === 'object') {
@@ -169,10 +166,9 @@ window.waktool = {
     }
     const pf = s.prefs || {};
     if (Array.isArray(pf.pins)) setPins(pf.pins.filter(k => CRAFTS.some(c => c.key === k)));
-    if (Array.isArray(pf.sessions)) {
-      const mine = jget('sessions', []) || [], seen = new Set(mine.map(h => h.t));
-      store.set('sessions', JSON.stringify([...mine, ...pf.sessions.filter(h => !seen.has(h.t))].sort((a, b) => a.t - b.t).slice(-100)));
-    }
+    // objectif et sac : le plus récent gagne (le sac change en direct pendant le jeu)
+    if (pf.goal && typeof pf.goal === 'object' && (pf.goal.t || 0) > (goal().t || 0)) store.set('goal', JSON.stringify(pf.goal));
+    if (pf.stock && pf.stock.items && typeof pf.stock.items === 'object' && (pf.stock.t || 0) > bag().t) store.set('stock', JSON.stringify(pf.stock));
     ALL.forEach(j => {
       const v = s.levels && s.levels[j.key];
       if (v !== undefined && v !== null) store.set(lvlKey(j.key), String(v));
@@ -200,6 +196,12 @@ window.waktool = {
   price,
   allItems,
   // lignes du journal du chat (tests, ou collage manuel)
+  // prochaine action de l'assistant d'objectif (tests)
+  goalGuide() {
+    const g = goalGuide(goalCtx());
+    return { kind: g.kind, key: g.key, N: g.N, ready: g.ready, next: g.next && g.next.item.name,
+      ing: (g.ing || []).map(o => ({ name: o.item.name, have: o.have, need: o.need, ok: o.ok })) };
+  },
   chatFeed(lines, first = false, mod = Date.now()) { chatFeed(typeof lines === 'string' ? lines.split(/\r?\n/) : lines, first, mod); },
 };
 
@@ -207,8 +209,8 @@ window.addEventListener('hashchange', () => {
   const h = location.hash.slice(1);
   if (PAGES.includes(h) && h !== st.page) go(h);
   else if (getJob(h) && (h !== st.cur || st.page !== 'metiers')) go('metiers', h);
+  else if (h === 'session') go('objectif');
 });
 renderAll();
-if (sess().start) $('#live-dot').hidden = false;
 
 export { THEMES, themeBtn, applyTheme, curTheme, installEvt, installBtn, PAGES, job, subOf, go, tabs, ddBtn, ddMenu, togglePin, renderTabs, renderAll, renderPage };

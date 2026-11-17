@@ -8,14 +8,14 @@ const STATE = {
 };
 const noOverflow = async page => expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
 
-for (const hash of ['paysan', 'rentabilite', 'zones', 'session', 'boulanger']) {
+for (const hash of ['paysan', 'rentabilite', 'zones', 'objectif', 'boulanger']) {
   test(`page #${hash}`, async ({ page }) => {
     const errs = trackErrors(page);
     await seed(page, STATE);
     await page.goto('/?t=' + Date.now() + '#' + hash);
     await page.waitForTimeout(1200);
     const visible = await page.$$eval('.main > div:not([hidden])', a => a.map(x => x.id));
-    expect(visible).toEqual([['rentabilite', 'zones', 'session'].includes(hash) ? 'page-' + hash : 'page-metiers']);
+    expect(visible).toEqual([['rentabilite', 'zones', 'objectif'].includes(hash) ? 'page-' + hash : 'page-metiers']);
     await noOverflow(page);
     expect(errs).toEqual([]);
   });
@@ -37,17 +37,30 @@ test('sous-onglets d’un métier de récolte', async ({ page }) => {
   expect(errs).toEqual([]);
 });
 
-test('session : compteurs au clavier et application de l’XP', async ({ page }) => {
-  await seed(page, { ...STATE, job: 'herboriste', 'target.herboriste': '18' });
-  await page.goto('/?c#session');
-  for (let i = 0; i < 14; i++) await page.keyboard.press('Space');
-  await page.keyboard.press('p');
-  await expect(page.locator('#c-h')).toHaveText('14');
-  await expect(page.locator('#c-p')).toHaveText('1');
-  await page.click('[data-sa="stop"]');
-  await page.click('[data-sa="apply"]');
-  const r = await page.evaluate(() => [localStorage.getItem('waktool.lvl.herboriste'), localStorage.getItem('waktool.xp.herboriste')]);
-  expect(r).toEqual(['18', '315']); // 15 actions × 196 XP = 2 940 → niv. 18 + 315 XP
+test('objectif : niveau, cible, plan, sac modifiable, affichage compact', async ({ page }) => {
+  const errs = trackErrors(page);
+  await seed(page, { ...STATE, goal: { job: 'herboriste' } });
+  await page.goto('/?o#session'); // ancienne adresse → Objectif
+  await expect(page.locator('#page-objectif')).toBeVisible();
+  await page.fill('[data-g="lvl"]', '55');
+  await page.press('[data-g="lvl"]', 'Enter');
+  await page.fill('[data-g="to"]', '62');
+  await page.press('[data-g="to"]', 'Enter');
+  await expect(page.locator('.next-txt b')).toContainText(/Récolte|Crafte/);
+  await expect(page.locator('.steps li').first()).toBeVisible();
+  await expect(page.locator('.hero-prog-r b')).toHaveText('62');
+  const tile = page.locator('#g-bag [data-stock]').first();
+  await tile.fill('17'); await tile.press('Enter');
+  const name = await page.locator('#g-bag [data-stock]').first().getAttribute('data-stock');
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('waktool.stock'))).items[name]).toBe(17);
+  await noOverflow(page);
+  await page.click('[data-view="compact"]');
+  await expect(page.locator('#page-objectif')).toHaveClass(/compact/);
+  await expect(page.locator('#g-steps')).toBeHidden(); // replié
+  await noOverflow(page);
+  await page.click('[data-view="full"]');
+  await expect(page.locator('#g-steps')).toBeVisible();
+  expect(errs).toEqual([]);
 });
 
 test('artisanat : recettes et liste de courses détaillée', async ({ page }) => {

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Waktool · Métiers Wakfu</title>
-  <meta name="description" content="Wakfu : ressources, zones, XP, plans de montée, recettes, rentabilité et sessions de farm pour chaque métier.">
+  <meta name="description" content="Wakfu : ressources, zones, XP, plans de montée, recettes, rentabilité et assistant d’objectif guidé en direct par le journal du chat.">
   <link rel="icon" href="img/app/favicon-32.png" sizes="32x32">
   <link rel="apple-touch-icon" href="img/app/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -15,7 +15,7 @@
     // thème appliqué avant le rendu (évite le flash)
     try { const t = localStorage.getItem('waktool.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
-  <link rel="stylesheet" href="assets/style.css?v=1896d40a">
+  <link rel="stylesheet" href="assets/style.css?v=f851cfef">
 </head>
 <body>
   <header class="top">
@@ -30,7 +30,7 @@
       <button type="button" data-page="metiers"><span aria-hidden="true">📚</span> Métiers</button>
       <button type="button" data-page="rentabilite"><span aria-hidden="true">💰</span> Rentabilité</button>
       <button type="button" data-page="zones"><span aria-hidden="true">🧭</span> Zones</button>
-      <button type="button" data-page="session"><span aria-hidden="true">⏱</span> Session<span class="live-dot" id="live-dot" hidden></span></button>
+      <button type="button" data-page="objectif"><span aria-hidden="true">🎯</span> Objectif</button>
     </nav>
     <div class="hright">
       <div id="account" class="account"></div>
@@ -71,8 +71,8 @@
       <div id="page-rentabilite" hidden></div>
       <!-- page Zones -->
       <div id="page-zones" hidden></div>
-      <!-- page Session -->
-      <div id="page-session" hidden></div>
+      <!-- page Objectif -->
+      <div id="page-objectif" hidden></div>
     </section>
 
     <aside class="side" id="side"></aside>
@@ -98,7 +98,7 @@
 
   <script src="data/crafts.js?v=ea2345be"></script>
   <script src="data/metiers.js?v=18b957f8"></script>
-  <script type="module" src="assets/js/main.js?v=ce18e5b8"></script>
+  <script type="module" src="assets/js/main.js?v=741d8fd4"></script>
   <script type="module" src="assets/import.js?v=7ea9c640"></script>
   <script type="module" src="assets/auth.js?v=1aa76efb"></script>
 </body>

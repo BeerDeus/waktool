@@ -48,6 +48,18 @@ Fenêtre Métiers en jeu (`J`) → capture → `Ctrl+V` sur le site (ou glisser-
 OCR 100 % local avec Tesseract.js (`vendor/tesseract/`, modèle `fra` compact) : 3 passes avec seuils différents + vote majoritaire ;
 les valeurs non unanimes sont signalées « ? » avant enregistrement.
 
+## Objectif + journal du chat
+
+Page **Objectif** : un niveau à atteindre → plan (récolter / replanter / crafter) calculé par `goalPlan` (`model.js`) :
+programmation dynamique sur les niveaux, chaque changement de spot coûte un trajet (réglable), le stock en sac sert d'abord.
+Le plan et la « prochaine action » sont recalculés à chaque ligne du journal (niveau, XP et sac réels).
+Alertes à l'écran (bandeau / plein écran / discrètes + bord qui pulse + son), jamais de notification système.
+
+Lecture de `%APPDATA%\zaap\gamesLogs\wakfu\logs\wakfu_chat.log` : Chrome bloque tout le dossier AppData pour l'API
+File System Access, d'où le **pont** `pont/waktool-pont.cmd` (batch + PowerShell, rien à installer) qui sert le fichier
+sur `http://127.0.0.1:47811/log?from=<octet>` (lignes « Information (jeu) » seulement, en-têtes `X-Next`, `X-Mod`, `X-Reset`…,
+origine et hôte contrôlés). Le fichier est en CRLF (`.gitattributes` : `-text`).
+
 ## Cache
 
 Le CDN Hostinger met en cache les assets : avant de committer une modif de `assets/` ou `data/`, lancer
@@ -61,4 +73,4 @@ Le CDN Hostinger met en cache les assets : avant de committer une modif de `asse
   les tests tournent ; s'ils passent, `main` est copié sur la branche **`live`**, que Hostinger déploie.
   Un code cassé reste donc sur `main` sans jamais atteindre le site.
 - Code du site : modules ES dans `assets/js/` (`util`, `model`, `state`, `main`, `metiers`, `profit`, `zones`,
-  `session`, `side`), sans étape de build. Après une modif de `assets/` ou `data/` : `python3 scripts/cachebust.py`.
+  `goal`, `chatlog`, `chatworker`, `alert`, `side`), sans étape de build. Après une modif de `assets/` ou `data/` : `python3 scripts/cachebust.py`.

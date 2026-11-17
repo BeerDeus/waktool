@@ -53,12 +53,48 @@ test('synchronisation compte : applyState complet sans erreur', async ({ page })
         progress: { paysan: { xp: 1200, target: 45, bonus: { pet: 'job', petLvl: 40, conso: true } } },
         prices: { 4442: [12, Date.now()] },
         phist: { 4442: [Date.now() - 864e5, 10, Date.now(), 12] },
-        prefs: { only: true, bonuses: { region: 30, wakfu: 20 }, theme: 'dark', pins: ['boulanger'], sessions: [{ t: 1, ms: 60000, job: 'paysan', res: 'Blé', xp: 100 }] },
+        prefs: { only: true, bonuses: { region: 30, wakfu: 20 }, theme: 'dark', pins: ['boulanger'], goal: { job: 'paysan', travel: 5, t: Date.now() }, stock: { t: Date.now(), items: { 'Blé': 12 } } },
       });
       const s = window.waktool.getState();
-      return { ok: true, lvl: s.levels.paysan, region: s.prefs.bonuses.region, pet: s.progress.paysan.bonus.pet, pins: s.prefs.pins, hist: s.phist[4442].length, sessions: s.prefs.sessions.length };
+      return { ok: true, lvl: s.levels.paysan, region: s.prefs.bonuses.region, pet: s.progress.paysan.bonus.pet, pins: s.prefs.pins, hist: s.phist[4442].length, goal: s.prefs.goal.job, ble: s.prefs.stock.items['Blé'] };
     } catch (e) { return { ok: false, err: String(e) }; }
   });
-  expect(r).toEqual({ ok: true, lvl: 30, region: 30, pet: 'job', pins: ['boulanger'], hist: 4, sessions: 1 });
+  expect(r).toEqual({ ok: true, lvl: 30, region: 30, pet: 'job', pins: ['boulanger'], hist: 4, goal: 'paysan', ble: 12 });
   expect(errs).toEqual([]);
+});
+
+test('objectif : plan avec trajets, stock utilisé d’abord, moins de changements de spot quand le trajet est long', async ({ page }) => {
+  const m = await mod(page, 'model');
+  const r = await m.evaluate(async M => {
+    await M.loadRecipes('herboriste');
+    const j = M.getJob('herboriste');
+    const a = M.goalPlan(j, 55, 0, 75, {}, { plant: true, craft: true, travel: 0 });
+    const b = M.goalPlan(j, 55, 0, 75, {}, { plant: true, craft: true, travel: 1800 });
+    const c = M.goalPlan(j, 55, 0, 60, { 'Fleur de Rhodon': 500, 'Pied de Boufton': 500 }, { plant: true, craft: true, travel: 180 });
+    const d = M.goalPlan(j, 55, 0, 60, {}, { plant: true, craft: true, travel: 180 });
+    const xpOk = p => Math.abs(p.steps.reduce((s, x) => s + x.xp, 0) - p.xp) < 1;
+    return { xp: a.xp, xpOk: xpOk(a) && xpOk(b), spotsA: a.travels, spotsB: b.travels, finite: isFinite(a.time) && isFinite(b.time),
+      first: c.steps[0].key, stockUsed: c.steps[0].ing.every(o => o.fromStock > 0), faster: c.farm < d.farm };
+  });
+  expect(r.xp).toBe(75 * (75 * 75 - 55 * 55));
+  expect(r.xpOk).toBe(true);
+  expect(r.finite).toBe(true);
+  expect(r.spotsB).toBeLessThanOrEqual(r.spotsA); // trajet long : on change moins de cible
+  expect(r.first).toMatch(/^c:/); // ingrédients en sac : on commence par crafter
+  expect(r.stockUsed).toBe(true);
+  expect(r.faster).toBe(true);
+});
+
+test('objectif : plan fini pour chaque métier de récolte', async ({ page }) => {
+  const m = await mod(page, 'model');
+  const r = await m.evaluate(async M => {
+    const out = {};
+    for (const j of M.HARVEST) {
+      await M.loadRecipes(j.key);
+      const p = M.goalPlan(j, 20, 0, 60, {}, { plant: true, craft: true, travel: 180 });
+      out[j.key] = isFinite(p.time) && p.steps.length > 0 && p.blocked === null;
+    }
+    return out;
+  });
+  expect(Object.values(r).every(Boolean)).toBe(true);
 });

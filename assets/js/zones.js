@@ -1,7 +1,7 @@
 // Waktool — module zones : « Où aller ? » (zones classées selon ce que tu peux farmer, tous métiers)
-import { $, esc, fmt, fmtK, icon, norm, sj } from './util.js?v=ce18e5b8';
-import { HARVEST, XP, bonusXp, dur, levelOf, price, qtyStats, zonesIndex } from './model.js?v=ce18e5b8';
-import { go } from './main.js?v=ce18e5b8';
+import { $, esc, fmt, fmtK, icon, norm, sj } from './util.js?v=741d8fd4';
+import { HARVEST, XP, bonusXp, dur, levelOf, price, qtyStats, zonesIndex } from './model.js?v=741d8fd4';
+import { go } from './main.js?v=741d8fd4';
 
 const Z_DEF = { jobs: null, sort: 'jobs', q: '', useful: true };
 const opts = () => sj.get('zones', Z_DEF);
