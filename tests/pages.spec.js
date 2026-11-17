@@ -72,3 +72,18 @@ test('changer de niveau remet l’XP actuelle à 0 (saisie et import)', async ({
   await page.evaluate(() => window.waktool.applyState({ levels: { paysan: 32 }, progress: { paysan: { xp: 777 } } }));
   expect(await page.evaluate(() => localStorage.getItem('waktool.xp.paysan'))).toBe('777');
 });
+
+test('filtre « Donne de l’XP seulement » (ressources et recettes)', async ({ page }) => {
+  await seed(page, STATE); // Paysan 30 : ressources niv. 0 à 10 ne donnent plus d'XP, > 30 trop hautes
+  await page.goto('/?f#paysan');
+  await page.click('[data-sub="res"]');
+  await page.check('#xponly');
+  const lv = await page.$$eval('#list .res .res-lvl', a => a.map(x => +x.textContent.replace(/\D/g, '')));
+  expect(lv.length).toBeGreaterThan(0);
+  expect(lv.every(l => l > 10 && l <= 30)).toBe(true);
+  await page.click('[data-sub="rec"]');
+  await expect(page.locator('#list')).not.toContainText('Chargement');
+  const rl = await page.$$eval('#list .rec .res-lvl', a => a.map(x => +x.textContent.replace(/\D/g, '')));
+  expect(rl.every(l => l > 10 && l <= 30)).toBe(true);
+  await expect(page.locator('#list .xpline.none')).toHaveCount(0);
+});

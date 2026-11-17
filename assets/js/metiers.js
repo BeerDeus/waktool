@@ -1,15 +1,17 @@
 // Waktool — module metiers
-import { st } from './state.js?v=da63b72b';
-import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=da63b72b';
-import { expandShopping, farmInfo, PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=da63b72b';
-import { renderSide } from './side.js?v=da63b72b';
-import { renderProfit } from './profit.js?v=da63b72b';
-import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=da63b72b';
+import { st } from './state.js?v=bb56cf71';
+import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=bb56cf71';
+import { expandShopping, farmInfo, PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=bb56cf71';
+import { renderSide } from './side.js?v=bb56cf71';
+import { renderProfit } from './profit.js?v=bb56cf71';
+import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=bb56cf71';
 // ================================================================ page Métiers
-const q = $('#q'), only = $('#only');
+const q = $('#q'), only = $('#only'), xponly = $('#xponly');
 only.checked = store.get('only') === '1';
+xponly.checked = store.get('xponly') === '1';
 q.addEventListener('input', () => renderContent());
 only.addEventListener('input', () => { store.set('only', only.checked ? '1' : '0'); renderContent(); changed(); });
+xponly.addEventListener('input', () => { store.set('xponly', xponly.checked ? '1' : '0'); renderContent(); changed(); });
 $('#rtype').value = store.get('rtype') || 'all';
 $('#rtype').addEventListener('change', () => { store.set('rtype', $('#rtype').value); recLimit = 120; renderContent(); });
 let recLimit = 120;
@@ -100,6 +102,7 @@ function renderResources(j) {
   const term = norm(q.value.trim()), L = levelOf(j.key);
   const rows = j.resources.filter(r => {
     if (only.checked && L !== null && r.level > L) return false;
+    if (xponly.checked && L !== null && (r.level > L || !XP.mult(L - r.level))) return false;
     if (!term) return true;
     return norm([r.name, ...(r.zones || []), ...(r.zones_en || []), ...[...(r.normal || []), ...(r.rare || []), ...(r.seed || [])].map(i => i.name)].join(' ')).includes(term);
   });
@@ -169,6 +172,7 @@ function renderRecipes(j) {
   const type = j.type === 'craft' ? ($('#rtype').value || 'all') : 'all';
   const rows = data.recipes.filter(r => {
     if (only.checked && L !== null && r.level > L) return false;
+    if (xponly.checked && L !== null && (r.level > L || !XP.mult(L - r.level))) return false;
     if (type === 'craft' && r.up) return false;
     if (type === 'up' && !r.up) return false;
     return !term || norm([r.res.item.name, ...r.ing.map(i => i.item.name)].join(' ')).includes(term);
@@ -367,4 +371,4 @@ function equipHtml(j) {
   </div><p class="meta">Active ce que tu utilises dans le panneau « Bonus actifs » : les calculs en tiennent compte partout.</p>`;
 }
 
-export { q, only, recLimit, renderMetiers, targetOf, renderJobCard, renderContent, renderResources, recipeCost, costHtml, ingChip, renderRecipes, craftListHtml, segHtml, harvestPlanHtml, craftPlanHtml, pricesHtml, recipeHtml, equipHtml };
+export { q, only, xponly, recLimit, renderMetiers, targetOf, renderJobCard, renderContent, renderResources, recipeCost, costHtml, ingChip, renderRecipes, craftListHtml, segHtml, harvestPlanHtml, craftPlanHtml, pricesHtml, recipeHtml, equipHtml };

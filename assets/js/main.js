@@ -1,12 +1,12 @@
 // Waktool — module main
-import { st } from './state.js?v=da63b72b';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=da63b72b';
-import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=da63b72b';
-import { renderSide } from './side.js?v=da63b72b';
-import { only, renderJobCard, renderMetiers } from './metiers.js?v=da63b72b';
-import { renderProfit } from './profit.js?v=da63b72b';
-import { renderZones } from './zones.js?v=da63b72b';
-import { renderSession, sess } from './session.js?v=da63b72b';
+import { st } from './state.js?v=bb56cf71';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=bb56cf71';
+import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=bb56cf71';
+import { renderSide } from './side.js?v=bb56cf71';
+import { only, xponly, renderJobCard, renderMetiers } from './metiers.js?v=bb56cf71';
+import { renderProfit } from './profit.js?v=bb56cf71';
+import { renderZones } from './zones.js?v=bb56cf71';
+import { renderSession, sess } from './session.js?v=bb56cf71';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');
@@ -146,7 +146,7 @@ window.waktool = {
       if (Object.keys(o).length) progress[j.key] = o;
     });
     return { levels, progress, prices: PRICES(), phist: jget('phist', {}) || {},
-      prefs: { only: only.checked, bonuses: bg(), theme: curTheme(), pins: pins(), sessions: jget('sessions', []) || [] } };
+      prefs: { only: only.checked, xponly: xponly.checked, bonuses: bg(), theme: curTheme(), pins: pins(), sessions: jget('sessions', []) || [] } };
   },
   applyState(s) {
     if (s.phist && typeof s.phist === 'object') {
@@ -176,6 +176,7 @@ window.waktool = {
       if (v !== undefined && v !== null) store.set(lvlKey(j.key), String(v));
     });
     if (typeof pf.only === 'boolean') { only.checked = pf.only; store.set('only', pf.only ? '1' : '0'); }
+    if (typeof pf.xponly === 'boolean') { xponly.checked = pf.xponly; store.set('xponly', pf.xponly ? '1' : '0'); }
     if (THEMES[pf.theme]) { store.set('theme', pf.theme); applyTheme(pf.theme); }
     if (pf.bonuses && typeof pf.bonuses === 'object') sj.set('bonus.global', { ...G_DEF, ...pf.bonuses });
     Object.entries(s.progress || {}).forEach(([k, o]) => {
