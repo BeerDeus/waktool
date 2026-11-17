@@ -1,11 +1,12 @@
 // Waktool — module main
-import { st } from './state.js?v=f108e1bb';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=f108e1bb';
-import { ALL, CRAFTS, HARVEST, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=f108e1bb';
-import { renderSide } from './side.js?v=f108e1bb';
-import { only, renderJobCard, renderMetiers } from './metiers.js?v=f108e1bb';
-import { renderProfit } from './profit.js?v=f108e1bb';
-import { renderSession, sess } from './session.js?v=f108e1bb';
+import { st } from './state.js?v=8bfcdbf8';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=8bfcdbf8';
+import { ALL, CRAFTS, HARVEST, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=8bfcdbf8';
+import { renderSide } from './side.js?v=8bfcdbf8';
+import { only, renderJobCard, renderMetiers } from './metiers.js?v=8bfcdbf8';
+import { renderProfit } from './profit.js?v=8bfcdbf8';
+import { renderZones } from './zones.js?v=8bfcdbf8';
+import { renderSession, sess } from './session.js?v=8bfcdbf8';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');
@@ -39,7 +40,7 @@ installBtn.addEventListener('click', async () => {
 });
 
 // ================================================================ état / navigation
-const PAGES = ['metiers', 'rentabilite', 'session'];
+const PAGES = ['metiers', 'rentabilite', 'zones', 'session'];
 st.cur = store.get('job') || HARVEST[0].key;
 {
   const h = location.hash.slice(1);
@@ -118,7 +119,7 @@ function renderAll() {
   document.documentElement.style.setProperty('--c', st.page === 'metiers' || st.page === 'session' ? j.color : '#e6b84a');
   $('#mainnav').querySelectorAll('[data-page]').forEach(b => b.setAttribute('aria-current', b.dataset.page === st.page ? 'page' : 'false'));
   PAGES.forEach(p => { $('#page-' + p).hidden = p !== st.page; });
-  $('#jobbar').hidden = st.page === 'rentabilite';
+  $('#jobbar').hidden = st.page === 'rentabilite' || st.page === 'zones';
   if (st.page === 'session' && j.type !== 'harvest') { st.cur = HARVEST.slice().sort((a, b) => (levelOf(b.key) ?? -1) - (levelOf(a.key) ?? -1))[0].key; }
   renderTabs();
   renderPage();
@@ -126,6 +127,7 @@ function renderAll() {
 function renderPage() {
   if (st.page === 'metiers') renderMetiers();
   else if (st.page === 'rentabilite') renderProfit();
+  else if (st.page === 'zones') renderZones();
   else renderSession();
   renderSide();
 }

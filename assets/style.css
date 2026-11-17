@@ -437,3 +437,27 @@ dialog.imp ul.meta { margin: 0 0 10px; padding-left: 18px; }
   .kpi { padding: 7px 9px; }
   .kpi b, .kpis.big .kpi b { font-size: 17px; }
 }
+
+/* ============================================================ page Zones */
+.zgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
+.zcard { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 10px; align-content: start; box-shadow: var(--shadow); }
+.zcard header { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.zcard h3 { margin: 0; font-size: 16px; }
+.zcard header p { margin: 0; color: var(--mut); font-size: 12.5px; }
+.zbadges { display: flex; flex-direction: column; align-items: end; gap: 3px; }
+.zb { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.zb.ok { color: var(--ok); border: 1px solid var(--ok); }
+.zb.k { color: var(--acc); border: 1px solid var(--acc); }
+.zjob { display: grid; gap: 5px; }
+.zjob .jchip { justify-self: start; cursor: pointer; }
+.zres { display: flex; flex-wrap: wrap; gap: 4px; }
+.zr { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; padding: 2px 8px 2px 3px; border-radius: 8px; background: var(--card2); border: 1px solid var(--line); }
+.zr img, .zr .noimg { width: 22px; height: 22px; }
+.zr small { color: var(--mut); font-weight: 700; }
+.zr em { font-style: normal; color: var(--acc); font-weight: 700; font-size: 11.5px; }
+.zr.full { border-color: color-mix(in srgb, var(--ok) 70%, transparent); background: color-mix(in srgb, var(--ok) 12%, var(--card2)); }
+.zr.part { border-color: color-mix(in srgb, var(--acc) 70%, transparent); }
+.zr.none { opacity: .6; }
+.zr.locked { opacity: .4; border-style: dashed; }
+.zr.sample { padding: 0 7px; font-size: 11.5px; }
+@media (max-width: 640px) { .zgrid { grid-template-columns: 1fr; } }

@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=f108e1bb';
-import { D, icon, jget, sj, store } from './util.js?v=f108e1bb';
+import { st } from './state.js?v=8bfcdbf8';
+import { D, icon, jget, norm, sj, store } from './util.js?v=8bfcdbf8';
 
-import { job, renderPage } from './main.js?v=f108e1bb';
+import { job, renderPage } from './main.js?v=8bfcdbf8';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -326,3 +326,52 @@ function profitRows(j, opts) {
 }
 
 export { PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
+
+// ================================================================ zones (« Où aller ? »)
+// Les zones viennent du texte MethodWakfu (« Région - zone1, zone2 & zone3 »), hétérogène : on normalise.
+const REGION_ALIAS = { 'brakmar': 'Brâkmar', 'erebora': 'Ereboria', 'ile wabbit': 'Île des Wabbits', 'royaume de chuchoku': 'Royaume Chuchoku' };
+const zkey = s => norm(s).replace(/[’']/g, "'").replace(/[^a-z0-9' ()]/g, ' ').replace(/\s+/g, ' ').trim();
+const tidy = s => s.replace(/’/g, "'").replace(/\b(\w+) \1\b/g, '$1').replace(/\s+/g, ' ').trim();
+let ZONES = null;
+function zonesIndex() {
+  if (ZONES) return ZONES;
+  const parsed = [];
+  HARVEST.forEach(j => j.resources.forEach(r => {
+    (r.zones || []).forEach(line => {
+      let region = null, rest = tidy(line);
+      const m = rest.match(/^(.+?) - (.+)$/);
+      if (m) { region = m[1]; rest = m[2]; }
+      // « Mine d'Amakna - Galeries », « Haut Flanc - Blérox (Zinit) »
+      const mine = region && region.match(/^Mines? (?:de |d'|de la )(.+)$/i);
+      if (mine) { rest = `${region} (${rest})`; region = mine[1]; }
+      if (region && /\(Zinit\)$/.test(rest)) { rest = `${region} (${rest.replace(/ \(Zinit\)$/, '')})`; region = 'Zinit'; }
+      if (region) region = REGION_ALIAS[zkey(region)] || region;
+      rest.split(/\s*,\s*|\s+&\s+/).filter(Boolean).forEach(z => {
+        z = z.replace(/^(Grotte du Dor'Mor) Zinit$/, '$1');
+        parsed.push({ region, zone: z, j, r });
+      });
+    });
+    (r.zones_en || []).forEach(z => parsed.push({ region: 'Zones récentes (noms EN)', zone: z, j, r }));
+  }));
+  // région des zones citées sans région : déduite des autres mentions, du nom, sinon la zone elle-même
+  const regionOf = {};
+  parsed.forEach(p => { if (p.region) regionOf[zkey(p.zone)] ||= p.region; });
+  const regions = [...new Set(parsed.map(p => p.region).filter(Boolean))];
+  const loose = [...new Set(parsed.filter(p => !p.region).map(p => p.zone))]; // îles / zones isolées (Kelba, Saharach…)
+  parsed.forEach(p => {
+    if (p.region) return;
+    const k = zkey(p.zone);
+    p.region = regionOf[k] || regions.find(rg => k.includes(zkey(rg)) && zkey(rg).length > 3)
+      || loose.find(z => z !== p.zone && k.includes(zkey(z))) || p.zone;
+  });
+  const map = new Map();
+  parsed.forEach(p => {
+    const k = zkey(p.region) + '|' + zkey(p.zone);
+    if (!map.has(k)) map.set(k, { key: k, region: p.region, name: p.zone, entries: [] });
+    const z = map.get(k);
+    if (!z.entries.some(e => e.j === p.j && e.r === p.r)) z.entries.push({ j: p.j, r: p.r });
+  });
+  ZONES = [...map.values()];
+  return ZONES;
+}
+export { zonesIndex };

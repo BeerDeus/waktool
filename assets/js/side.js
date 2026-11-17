@@ -1,9 +1,9 @@
 // Waktool — module side
-import { st } from './state.js?v=f108e1bb';
-import { $, changed, esc, fmt, fmt1, fmtK, sec, sj, store } from './util.js?v=f108e1bb';
-import { HARVEST, REGION, XP, activeTool, bestAt, bg, bjob, bonusXp, climate, levelOf, price, qtyStats } from './model.js?v=f108e1bb';
-import { renderJobCard } from './metiers.js?v=f108e1bb';
-import { job, renderPage } from './main.js?v=f108e1bb';
+import { st } from './state.js?v=8bfcdbf8';
+import { $, changed, esc, fmt, fmt1, fmtK, sec, sj, store } from './util.js?v=8bfcdbf8';
+import { HARVEST, REGION, XP, activeTool, bestAt, bg, bjob, bonusXp, climate, levelOf, price, qtyStats } from './model.js?v=8bfcdbf8';
+import { renderJobCard } from './metiers.js?v=8bfcdbf8';
+import { job, renderPage } from './main.js?v=8bfcdbf8';
 // ================================================================ panneau Bonus (colonne de droite)
 const chk = (id, on, label, extra = '') => `<label class="bchk"><input type="checkbox" data-b="${id}" ${on ? 'checked' : ''}> ${label}${extra}</label>`;
 const selB = (id, val, opts) => `<select data-b="${id}">${opts.map(([v, l]) => `<option value="${v}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
@@ -85,7 +85,7 @@ function renderSide() {
   $('#layout').classList.toggle('noside', !showSide);
   if (!showSide) { side.innerHTML = ''; return; }
   const more = store.get('ui.bmore') !== '0';
-  if (st.page === 'rentabilite') {
+  if ((st.page === 'rentabilite' || st.page === 'zones')) {
     side.innerHTML = `<div class="box"><h4>Bonus actifs</h4>${situationHtml(null)}
       <details class="bmore" ${more ? 'open' : ''}><summary>Équipement, consommables et autres</summary>${globalMoreHtml()}
         <div class="bgrp"><h5>Par métier</h5>${HARVEST.map(h => `<details class="jeq"><summary><img src="${h.icon}" alt=""> ${esc(h.label)} <small>+${+qtyStats(h).pct.toFixed(1)} % qté</small></summary>${jobEquipHtml(h, true)}</details>`).join('')}</div>

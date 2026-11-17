@@ -15,7 +15,7 @@
     // thème appliqué avant le rendu (évite le flash)
     try { const t = localStorage.getItem('waktool.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
-  <link rel="stylesheet" href="assets/style.css?v=b9adaede">
+  <link rel="stylesheet" href="assets/style.css?v=7000ec0d">
 </head>
 <body>
   <header class="top">
@@ -29,6 +29,7 @@
     <nav class="mainnav" id="mainnav" aria-label="Sections">
       <button type="button" data-page="metiers"><span aria-hidden="true">📚</span> Métiers</button>
       <button type="button" data-page="rentabilite"><span aria-hidden="true">💰</span> Rentabilité</button>
+      <button type="button" data-page="zones"><span aria-hidden="true">🧭</span> Zones</button>
       <button type="button" data-page="session"><span aria-hidden="true">⏱</span> Session<span class="live-dot" id="live-dot" hidden></span></button>
     </nav>
     <div class="hright">
@@ -67,6 +68,8 @@
       </div>
       <!-- page Rentabilité -->
       <div id="page-rentabilite" hidden></div>
+      <!-- page Zones -->
+      <div id="page-zones" hidden></div>
       <!-- page Session -->
       <div id="page-session" hidden></div>
     </section>
@@ -94,7 +97,7 @@
 
   <script src="data/crafts.js?v=ea2345be"></script>
   <script src="data/metiers.js?v=18b957f8"></script>
-  <script type="module" src="assets/js/main.js?v=f108e1bb"></script>
+  <script type="module" src="assets/js/main.js?v=8bfcdbf8"></script>
   <script type="module" src="assets/import.js?v=0263b7fa"></script>
   <script type="module" src="assets/auth.js?v=d26f6e14"></script>
 </body>
