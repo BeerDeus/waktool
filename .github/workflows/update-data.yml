@@ -1,0 +1,56 @@
+name: Mise à jour des données Wakfu
+
+on:
+  schedule:
+    - cron: '17 4 * * *'   # tous les jours à 04:17 UTC
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Tout régénérer même si la version Ankama n''a pas changé'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Régénération des données
+        id: update
+        env:
+          FORCE: ${{ inputs.force && '--force' || '' }}
+        run: bash scripts/update_data.sh $FORCE
+
+      - name: Commit et push sur main
+        if: success() && steps.update.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.update.outputs.version }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m "Données Wakfu v$VERSION (mise à jour automatique)"
+          git pull --rebase origin main
+          git push origin HEAD:main
+          git show --stat --oneline HEAD
+
+      - name: Résumé
+        if: always()
+        run: |
+          echo "Version Ankama : ${{ steps.update.outputs.version }} — changements : ${{ steps.update.outputs.changed || 'échec' }}" >> "$GITHUB_STEP_SUMMARY"
