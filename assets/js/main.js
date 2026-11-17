@@ -1,12 +1,13 @@
 // Waktool — module main
-import { st } from './state.js?v=bb56cf71';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=bb56cf71';
-import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=bb56cf71';
-import { renderSide } from './side.js?v=bb56cf71';
-import { only, xponly, renderJobCard, renderMetiers } from './metiers.js?v=bb56cf71';
-import { renderProfit } from './profit.js?v=bb56cf71';
-import { renderZones } from './zones.js?v=bb56cf71';
-import { renderSession, sess } from './session.js?v=bb56cf71';
+import { st } from './state.js?v=895eb43b';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=895eb43b';
+import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=895eb43b';
+import { renderSide } from './side.js?v=895eb43b';
+import { only, xponly, renderJobCard, renderMetiers } from './metiers.js?v=895eb43b';
+import { renderProfit } from './profit.js?v=895eb43b';
+import { renderZones } from './zones.js?v=895eb43b';
+import { renderSession, sess } from './session.js?v=895eb43b';
+import { feed as chatFeed } from './chatlog.js?v=895eb43b';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');
@@ -115,6 +116,7 @@ document.addEventListener('click', () => { ddMenu.hidden = true; });
 
 // ================================================================ rendu global
 function renderAll() {
+  if (st.page === 'session') { const s = sess(); if ((s.start || s.acc || s.real) && getJob(s.job)) st.cur = s.job; } // session en cours : son métier
   const j = job();
   document.documentElement.style.setProperty('--c', st.page === 'metiers' || st.page === 'session' ? j.color : '#e6b84a');
   $('#mainnav').querySelectorAll('[data-page]').forEach(b => b.setAttribute('aria-current', b.dataset.page === st.page ? 'page' : 'false'));
@@ -197,6 +199,8 @@ window.waktool = {
   setPrices(map) { setPrices(map); renderPage(); if (st.page === 'metiers') renderJobCard(job()); changed(); },
   price,
   allItems,
+  // lignes du journal du chat (tests, ou collage manuel)
+  chatFeed(lines, first = false, mod = Date.now()) { chatFeed(typeof lines === 'string' ? lines.split(/\r?\n/) : lines, first, mod); },
 };
 
 window.addEventListener('hashchange', () => {

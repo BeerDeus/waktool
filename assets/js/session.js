@@ -1,15 +1,16 @@
 // Waktool — module session : chrono de farm, estimation en direct, compteurs, bilan, historique
-import { st } from './state.js?v=bb56cf71';
-import { $, changed, clock, esc, fmt, fmtK, jget, sec, sj, store } from './util.js?v=bb56cf71';
-import { PLANTABLE, XP, bestAt, bonusPlant, bonusXp, dur, fieldCycle, getJob, levelOf, lvlKey, price, qtyStats, xpOf } from './model.js?v=bb56cf71';
-import { renderSide } from './side.js?v=bb56cf71';
-import { job, renderTabs } from './main.js?v=bb56cf71';
+import { st } from './state.js?v=895eb43b';
+import { $, changed, clock, esc, fmt, fmtK, icon, jget, sec, sj, store } from './util.js?v=895eb43b';
+import { PLANTABLE, XP, bestAt, bonusPlant, bonusXp, dur, fieldCycle, getJob, levelOf, lvlKey, price, qtyStats, xpOf } from './model.js?v=895eb43b';
+import { renderSide } from './side.js?v=895eb43b';
+import { go, job, renderTabs } from './main.js?v=895eb43b';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, endSession } from './chatlog.js?v=895eb43b';
 
 const S_DEF = { job: null, res: null, prod: null, mode: 'wild', eff: 80, plan: 60, start: null, acc: 0, cnt: { h: 0, p: 0 }, notify: false, notified: false, done: null };
 const sess = () => { const s = sj.get('session', S_DEF); s.cnt ||= { h: 0, p: 0 }; return s; };
 const setSess = s => { sj.set('session', s); };
 const elapsed = s => s.acc + (s.start ? Date.now() - s.start : 0);
-const counted = s => (s.cnt.h + s.cnt.p) > 0;
+const counted = s => (s.cnt.h + s.cnt.p) > 0 || !!s.real;
 let tick = null;
 
 function sessCtx(s) {
@@ -76,19 +77,31 @@ function finish(c, o) {
   return { ...o, actions: o.h + o.p, d: r0.d, per: r0.perH, perEnd: r1.perH, known: c.L !== null, res: c.r,
     qty: o.items, unit, kamas: unit ? o.items * unit : null, after: { level: o.L, xp: Math.floor(o.x) }, target: targetLevel(c.j) };
 }
-const estimate = (c, s, ms) => (counted(s) ? estimateCount(c, s.cnt) : estimateTime(c, ms, s.eff));
+// chiffres réels lus dans le journal du chat : XP exacte, niveau actuel, objets ramassés valorisés au prix HDV
+function estimateReal(c, s) {
+  const R = s.real, L = levelOf(s.job) ?? R.L0 ?? 0;
+  const o = finish(c, { h: R.h, p: R.p, xp: R.xp, items: 0, from: R.L0 ?? L, L, x: xpOf(s.job), mode: 'log' });
+  let qty = 0, kamas = 0, priced = 0;
+  for (const [name, n] of Object.entries(R.items)) {
+    qty += n;
+    const it = ITEMS[name], p = it && price(it.id);
+    if (p) { kamas += n * p; priced += n; }
+  }
+  return { ...o, qty, kamas: priced ? kamas : null, priced, fail: R.fail };
+}
+const estimate = (c, s, ms) => (s.real ? estimateReal(c, s) : counted(s) ? estimateCount(c, s.cnt) : estimateTime(c, ms, s.eff));
 
 function statsHtml(e) {
   if (!e) return '<p class="empty">Aucune ressource accessible.</p>';
   const lvUp = e.after.level - e.from;
   return `<div class="kpis big">
-    <div class="kpi"><span>${e.mode === 'count' ? 'Comptées' : 'Actions estimées'}</span><b>${fmt(e.h)}${e.p >= 0.5 ? ` + ${fmt(e.p)}` : ''}</b><small>${e.p >= 0.5 ? 'récoltes + plantations' : `récoltes · ${sec(e.d)} s / action`}</small></div>
-    <div class="kpi"><span>XP gagnée</span><b>${fmt(e.xp)}</b><small>${fmt(e.per)} XP / récolte</small></div>
+    <div class="kpi"><span>${e.mode === 'log' ? 'Lues dans le chat' : e.mode === 'count' ? 'Comptées' : 'Actions estimées'}</span><b>${fmt(e.h)}${e.p >= 0.5 ? ` + ${fmt(e.p)}` : ''}</b><small>${e.p >= 0.5 ? `récoltes + plantations${e.fail ? ` · ${fmt(e.fail)} ratée${e.fail > 1 ? 's' : ''}` : ''}` : `récoltes · ${sec(e.d)} s / action`}</small></div>
+    <div class="kpi"><span>XP gagnée</span><b>${fmt(e.xp)}</b><small>${e.mode === 'log' ? `${fmt(e.actions ? e.xp / e.actions : 0)} XP / action (réel)` : `${fmt(e.per)} XP / récolte`}</small></div>
     <div class="kpi"><span>Niveau</span><b>${e.from} → ${e.after.level}${lvUp ? ` <em class="pos">+${lvUp}</em>` : ''}</b><small>${fmt(e.after.xp)} / ${fmt(XP.need(e.after.level))} XP${e.target ? ` · objectif ${e.target}` : ''}</small></div>
-    <div class="kpi"><span>Ressources</span><b>${fmt(e.qty)}</b><small>${e.mode === 'count' ? 'estimées depuis tes récoltes' : 'estimées'}</small></div>
-    <div class="kpi"><span>Kamas estimés</span><b class="kph">${e.kamas !== null ? fmtK(e.kamas) : '—'}</b><small>${e.unit ? `${fmt(e.unit)} ₭ / u` : 'pas de prix HDV'}</small></div>
+    <div class="kpi"><span>Ressources</span><b>${fmt(e.qty)}</b><small>${e.mode === 'log' ? 'ramassées (chat)' : e.mode === 'count' ? 'estimées depuis tes récoltes' : 'estimées'}</small></div>
+    <div class="kpi"><span>Kamas estimés</span><b class="kph">${e.kamas !== null ? fmtK(e.kamas) : '—'}</b><small>${e.mode === 'log' ? (e.priced < e.qty ? `${fmt(e.priced)} / ${fmt(e.qty)} objets avec prix HDV` : 'prix HDV') : e.unit ? `${fmt(e.unit)} ₭ / u` : 'pas de prix HDV'}</small></div>
   </div>
-  ${e.known && !e.perEnd ? `<p class="meta warn-txt">⚠ ${esc(e.res.name)} ne donne plus d’XP à partir du niveau ${e.res.level + 20} : change de ressource pour continuer à monter.</p>`
+  ${e.mode === 'log' ? '' : e.known && !e.perEnd ? `<p class="meta warn-txt">⚠ ${esc(e.res.name)} ne donne plus d’XP à partir du niveau ${e.res.level + 20} : change de ressource pour continuer à monter.</p>`
     : e.known && e.perEnd < e.per ? `<p class="meta">XP par récolte en baisse en fin de session (${fmt(e.perEnd)} XP) : la ressource devient trop basse pour ton niveau.</p>` : ''}`;
 }
 
@@ -106,6 +119,7 @@ function renderSession() {
       <p class="meta">Lance le chrono quand tu commences : XP, niveau, ressources et kamas sont estimés en direct. Compte tes récoltes
         (<kbd>Espace</kbd>)${canPlant ? ' et plantations (<kbd>P</kbd>)' : ''} pour remplacer l’estimation par tes vrais chiffres. À la fin, applique l’XP à ta progression.</p>
     </div>
+    ${chatPanelHtml()}
     <div class="panel sess-setup">
       <div class="sess-row">
         <label>Métier<span class="jchip" style="--c:${c.j.color}"><img src="${c.j.icon}" alt="">${esc(c.j.label)}${c.L !== null ? ` ${c.L}` : ''}</span></label>
@@ -126,16 +140,17 @@ function renderSession() {
           ${active ? '<button type="button" class="big-btn stop" data-sa="stop">⏹ Terminer</button>' : ''}
         </div>
         <div class="counters">
-          <div class="ctr"><span>Récoltes</span><div><button type="button" data-sc="h:-1" aria-label="Retirer une récolte">−</button><b id="c-h">${s.cnt.h}</b><button type="button" class="plus" data-sc="h:1" title="Espace">+1</button></div></div>
-          ${canPlant ? `<div class="ctr"><span>Plantations</span><div><button type="button" data-sc="p:-1" aria-label="Retirer une plantation">−</button><b id="c-p">${s.cnt.p}</b><button type="button" class="plus" data-sc="p:1" title="Touche P">+1</button></div></div>` : ''}
+          <div class="ctr"><span>Récoltes</span><div>${s.real ? '' : '<button type="button" data-sc="h:-1" aria-label="Retirer une récolte">−</button>'}<b id="c-h">${s.cnt.h}</b>${s.real ? '' : '<button type="button" class="plus" data-sc="h:1" title="Espace">+1</button>'}</div></div>
+          ${canPlant ? `<div class="ctr"><span>Plantations</span><div>${s.real ? '' : '<button type="button" data-sc="p:-1" aria-label="Retirer une plantation">−</button>'}<b id="c-p">${s.cnt.p}</b>${s.real ? '' : '<button type="button" class="plus" data-sc="p:1" title="Touche P">+1</button>'}</div></div>` : ''}
         </div>
         <div class="tfoot">
           ${!active ? `<label class="plan-dur">Simuler <span class="unit"><input type="number" min="5" max="1440" step="5" data-s="plan" value="${s.plan}"><i>min</i></span></label>` : '<button type="button" class="lnk" data-sa="reset">Réinitialiser</button>'}
           ${'Notification' in window ? `<button type="button" class="lnk" data-sa="notify" title="Notification quand ton objectif de niveau est atteint">${s.notify ? '🔔 Alerte objectif activée' : '🔕 Prévenir à l’objectif'}</button>` : ''}
         </div>
       </div>
-      <div class="panel"><h4>${counted(s) ? 'Tes chiffres (comptés)' : active ? 'En direct (estimation)' : `Estimation pour ${s.plan} min`}</h4><div id="s-live">${statsHtml(estimate(c, s, active ? ms : s.plan * 60000))}</div></div>
+      <div class="panel"><h4>${s.real ? 'Tes chiffres (journal du chat)' : counted(s) ? 'Tes chiffres (comptés)' : active ? 'En direct (estimation)' : `Estimation pour ${s.plan} min`}</h4><div id="s-live">${statsHtml(estimate(c, s, active ? ms : s.plan * 60000))}</div></div>
     </div>
+    <div id="s-items">${itemsHtml(s, c)}</div>
     ${s.done ? doneHtml(s.done) : ''}
     <div class="panel">
       <h4>Historique</h4>
@@ -149,7 +164,7 @@ function renderSession() {
         <p class="meta">Total : ${clock(hist.reduce((a, h) => a + h.ms, 0))} · ${fmt(hist.reduce((a, h) => a + h.xp, 0))} XP · ${fmtK(hist.reduce((a, h) => a + (h.kamas || 0), 0))} · « ~ » = estimé</p>`
         : '<p class="meta">Tes sessions terminées apparaîtront ici.</p>'}
     </div>`;
-  clearInterval(tick);
+  clearInterval(tick); tick = null;
   if (running) tick = setInterval(liveTick, 1000);
   updateTitle();
 }
@@ -157,7 +172,7 @@ function renderSession() {
 // mise à jour légère chaque seconde (chrono + chiffres + titre de l'onglet + alerte objectif)
 function liveTick() {
   const s = sess();
-  if (!s.start) { clearInterval(tick); updateTitle(); return; }
+  if (!s.start) { clearInterval(tick); tick = null; updateTitle(); return; }
   updateTitle();
   const e = estimate(sessCtx(s), s, elapsed(s));
   if (s.notify && !s.notified && e && e.target && e.after.level >= e.target) {
@@ -175,6 +190,31 @@ function updateTitle() {
   $('#live-dot').hidden = !s.start;
 }
 
+// objets ramassés pendant la session (journal du chat) + objectifs de quantité
+function itemsHtml(s, c) {
+  const got = (s.real && s.real.items) || {}, goals = s.goals || {};
+  const names = [...new Set([...Object.keys(got), ...Object.keys(goals)])];
+  const opts = [];
+  c.avail.slice().reverse().forEach(r => [...(r.normal || []), ...(r.rare || []), ...(r.seed || [])].forEach(it => {
+    if (it && it.name && !names.includes(it.name) && !opts.includes(it.name)) opts.push(it.name);
+  }));
+  if (!names.length && !s.real) {
+    return `<div class="panel"><h4>Objectifs d’objets</h4><p class="meta">Avec le journal du chat lié, les objets ramassés sont comptés ici et une alerte sonne quand un objectif est atteint.</p>
+      <label class="goal-add">Ajouter un objectif <select data-goaladd><option value="">— objet —</option>${opts.map(n => `<option>${esc(n)}</option>`).join('')}</select></label></div>`;
+  }
+  const rows = names.sort((a, b) => (got[b] || 0) - (got[a] || 0)).map(n => {
+    const it = ITEMS[n] || { name: n }, q = got[n] || 0, g = goals[n] || 0, p = it.id && price(it.id);
+    const pct = g ? Math.min(100, q / g * 100) : 0;
+    return `<tr class="${g && q >= g ? 'goal-ok' : ''}"><td class="it">${icon({ ...it, name: n }, 'ico')}<span>${esc(n)}</span></td>
+      <td class="num"><b>${fmt(q)}</b></td>
+      <td><span class="unit goal-in"><input type="number" min="0" inputmode="numeric" data-goal="${esc(n)}" value="${g || ''}" placeholder="objectif"></span>${g ? `<div class="gbar"><i style="width:${pct}%"></i></div>` : ''}</td>
+      <td class="num">${p ? fmtK(q * p) : '—'}</td></tr>`;
+  }).join('');
+  return `<div class="panel"><h4>Objets ramassés <small>· objectifs avec alerte</small></h4>
+    <div class="tablewrap"><table class="ptable items-t"><thead><tr><th>Objet</th><th>Qté</th><th>Objectif</th><th>Valeur</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="meta">Rien pour l’instant.</td></tr>'}</tbody></table></div>
+    <label class="goal-add">Ajouter un objectif <select data-goaladd><option value="">— objet —</option>${opts.map(n => `<option>${esc(n)}</option>`).join('')}</select></label></div>`;
+}
+
 function doneHtml(d) {
   return `<div class="panel done">
     <div class="panel-head"><h3>Session terminée · ${clock(d.ms)}</h3><button type="button" class="lnk" data-sa="dismiss">Fermer</button></div>
@@ -184,13 +224,14 @@ function doneHtml(d) {
       <div class="kpi"><span>Ressources</span><b>${fmt(d.qty)}</b></div>
       <div class="kpi"><span>Kamas estimés</span><b class="kph">${d.kamas ? fmtK(d.kamas) : '—'}</b></div>
     </div>
-    ${d.applied ? '<p class="meta pos">✓ XP appliquée à ta progression.</p>' : `<button type="button" class="gbtn" data-sa="apply">Appliquer l’XP à ma progression (${esc((getJob(d.job) || {}).label)} ${d.from} → ${d.to})</button>`}
+    ${d.applied ? `<p class="meta pos">✓ ${d.log ? 'Progression mise à jour en direct depuis le journal du chat.' : 'XP appliquée à ta progression.'}</p>` : `<button type="button" class="gbtn" data-sa="apply">Appliquer l’XP à ma progression (${esc((getJob(d.job) || {}).label)} ${d.from} → ${d.to})</button>`}
   </div>`;
 }
 
 function bump(kind, n) {
   const s = sess();
   if (kind === 'p' && !PLANTABLE.includes(s.job)) return;
+  if (s.real) return; // chiffres lus dans le journal du chat
   s.cnt[kind] = Math.max(0, s.cnt[kind] + n);
   if (!s.start && n > 0 && !s.acc) s.start = Date.now(); // compter démarre le chrono
   setSess(s);
@@ -198,7 +239,8 @@ function bump(kind, n) {
 }
 
 $('#page-session').addEventListener('click', async e => {
-  const a = e.target.closest('[data-sa]'), hd = e.target.closest('[data-hdel]'), sc = e.target.closest('[data-sc]');
+  const a = e.target.closest('[data-sa]'), hd = e.target.closest('[data-hdel]'), sc = e.target.closest('[data-sc]'), ch = e.target.closest('[data-chat]');
+  if (ch) { await chatClick(ch); return; }
   if (sc) { const [k, n] = sc.dataset.sc.split(':'); bump(k, +n); return; }
   if (hd) {
     const h = jget('sessions', []) || []; h.splice(+hd.dataset.hdel, 1);
@@ -208,7 +250,7 @@ $('#page-session').addEventListener('click', async e => {
   const s = sess();
   if (a.dataset.sa === 'start') { s.start = Date.now(); s.done = null; s.notified = false; }
   if (a.dataset.sa === 'pause') { s.acc = elapsed(s); s.start = null; }
-  if (a.dataset.sa === 'reset') { s.acc = 0; s.start = null; s.cnt = { h: 0, p: 0 }; s.notified = false; }
+  if (a.dataset.sa === 'reset') { s.acc = 0; s.start = null; s.cnt = { h: 0, p: 0 }; s.notified = false; s.real = null; s.goalsHit = {}; s.lastTs = null; }
   if (a.dataset.sa === 'notify') {
     if (!s.notify && Notification.permission !== 'granted') {
       const perm = await Notification.requestPermission();
@@ -217,15 +259,16 @@ $('#page-session').addEventListener('click', async e => {
     s.notify = !s.notify;
   }
   if (a.dataset.sa === 'stop') {
-    const ms = elapsed(s), c = sessCtx(s), est = estimate(c, s, ms);
+    if (s.real) { endSession(); Object.assign(s, sess()); }
+    const ms = elapsed(s), c = sessCtx(s), est = estimate(c, s, ms), log = !!s.real;
     if (est && est.actions > 0) {
       s.done = { t: Date.now(), ms, job: c.j.key, res: c.r.name, mode: c.mode, counted: counted(s), xp: Math.round(est.xp), qty: est.qty, kamas: est.kamas,
-        from: est.from, to: est.after.level, xpAfter: est.after.xp, applied: false };
+        from: est.from, to: est.after.level, xpAfter: est.after.xp, applied: log, log };
       const h = jget('sessions', []) || [];
-      h.push({ t: s.done.t, ms, job: c.j.key, res: c.r.name, mode: c.mode, counted: counted(s), actions: Math.round(est.actions), xp: s.done.xp, kamas: est.kamas, applied: false });
+      h.push({ t: s.done.t, ms, job: c.j.key, res: c.r.name, mode: c.mode, counted: counted(s), actions: Math.round(est.actions), xp: s.done.xp, kamas: est.kamas, applied: log });
       store.set('sessions', JSON.stringify(h.slice(-100)));
     }
-    s.acc = 0; s.start = null; s.cnt = { h: 0, p: 0 }; s.notified = false;
+    s.acc = 0; s.start = null; s.cnt = { h: 0, p: 0 }; s.notified = false; s.real = null; s.goalsHit = {}; s.lastTs = null;
   }
   if (a.dataset.sa === 'apply' && s.done && !s.done.applied) {
     store.set(lvlKey(s.done.job), String(s.done.to));
@@ -241,6 +284,19 @@ $('#page-session').addEventListener('click', async e => {
   setSess(s); changed(); renderSession(); renderSide();
 });
 $('#page-session').addEventListener('change', e => {
+  const cc = e.target.closest('[data-chatcfg]');
+  if (cc) { chatCfgChange(cc); return; }
+  const gl = e.target.closest('[data-goal], [data-goaladd]');
+  if (gl) {
+    const s = sess(), name = gl.dataset.goal ?? gl.value, v = gl.dataset.goal !== undefined ? +gl.value : 100;
+    if (!name) return;
+    s.goals = { ...(s.goals || {}) };
+    if (v > 0) s.goals[name] = v; else delete s.goals[name];
+    s.goalsHit = { ...(s.goalsHit || {}) }; delete s.goalsHit[name];
+    setSess(s); renderSession();
+    if (gl.dataset.goaladd !== undefined) { const inp = document.querySelector(`[data-goal="${CSS.escape(name)}"]`); if (inp) { inp.focus(); inp.select(); } }
+    return;
+  }
   const el = e.target.closest('[data-s]');
   if (!el) return;
   const s = sess();
@@ -258,4 +314,22 @@ document.addEventListener('keydown', e => {
 // le chrono continue en arrière-plan (autre page / onglet)
 if (sess().start) tick = setInterval(liveTick, 1000);
 
-export { sess, renderSession };
+// mise à jour après des lignes du journal : rendu complet sauf si on est en train de saisir sur la page
+function refreshSession() {
+  updateTitle();
+  if (sess().start && !tick) tick = setInterval(liveTick, 1000);
+  if (st.page !== 'session') return;
+  const sj0 = sess().job;
+  if ((sess().start || sess().real) && sj0 !== st.cur && getJob(sj0)) { go(null, sj0); return; } // session lancée par le journal sur un autre métier
+  const a = document.activeElement;
+  if (!(a && a.closest('#page-session') && a.matches('input, select, textarea'))) { renderSession(); return; }
+  const s = sess(), box = $('#chat-box');
+  if (box) box.outerHTML = chatPanelHtml();
+  const ch = $('#c-h'), cp = $('#c-p');
+  if (ch) ch.textContent = s.cnt.h;
+  if (cp) cp.textContent = s.cnt.p;
+  if ($('#s-live')) $('#s-live').innerHTML = statsHtml(estimate(sessCtx(s), s, elapsed(s)));
+  if (!a.closest('#s-items')) $('#s-items').innerHTML = itemsHtml(s, sessCtx(s));
+}
+
+export { sess, setSess, renderSession, refreshSession };

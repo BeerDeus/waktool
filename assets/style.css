@@ -471,3 +471,23 @@ dialog.imp ul.meta { margin: 0 0 10px; padding-left: 18px; }
 .trend.up { color: var(--ok); } .trend.down { color: var(--ko); }
 .farm { display: inline-block; font-size: 11px; color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 50%, transparent); border-radius: 999px; padding: 0 7px; margin-left: 4px; white-space: nowrap; }
 .farm.na { color: var(--mut); border-color: var(--line); }
+
+/* ---------------- journal du chat (session) */
+.chat-box.on { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); }
+.chat-box code { background: var(--card2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 12px; word-break: break-all; }
+.chat-btns { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.chat-status { margin: 0; font-size: 13.5px; }
+.chat-on { color: var(--ok); font-weight: 700; }
+.chat-opts { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 13px; }
+.chat-opts select { margin-left: 4px; }
+.items-t td.it { display: flex; align-items: center; gap: 8px; }
+.items-t .ico { width: 26px; height: 26px; }
+.items-t tr.goal-ok td { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.goal-in input { width: 90px; }
+.gbar { height: 5px; border-radius: 3px; background: var(--card2); margin-top: 4px; overflow: hidden; max-width: 120px; }
+.gbar i { display: block; height: 100%; background: var(--c); }
+.goal-add { font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.toasts { position: fixed; right: 16px; bottom: 16px; z-index: 50; display: grid; gap: 8px; max-width: min(360px, calc(100vw - 32px)); }
+.toast { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 10px; padding: 10px 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); display: grid; gap: 2px; cursor: pointer; animation: toast-in .2s ease-out; }
+.toast span { font-size: 13px; color: var(--mut); }
+@keyframes toast-in { from { transform: translateY(10px); opacity: 0; } }
