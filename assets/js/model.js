@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=e4e1de4b';
-import { D, icon, jget, sj, store } from './util.js?v=e4e1de4b';
+import { st } from './state.js?v=f108e1bb';
+import { D, icon, jget, sj, store } from './util.js?v=f108e1bb';
 
-import { job, renderPage } from './main.js?v=e4e1de4b';
+import { job, renderPage } from './main.js?v=f108e1bb';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -57,7 +57,7 @@ const pins = () => jget('pins', []) || [];
 const setPins = a => store.set('pins', JSON.stringify(a));
 
 // ================================================================ bonus
-const G_DEF = { region: null, temp: null, climMalus: 50, havre: false, stasis: 0, turbo: false, xpExtra: 0, speed: 0,
+const G_DEF = { region: null, temp: null, climMalus: 50, plantPct: 70, wakfu: 0, havre: false, stasis: 0, turbo: false, xpExtra: 0, speed: 0,
   sceau: false, potion: false, pacte: 0, mdc: 0, captchat: 0, qtyExtra: 0 };
 const J_DEF = { tool: 'auto', pet: '', petLvl: 50, conso: false, casque: false, sacs: 0, gateau: false };
 const REGION = [
@@ -67,6 +67,34 @@ const REGION = [
 ];
 const bg = () => sj.get('bonus.global', G_DEF);
 const bjob = k => sj.get('bonus.' + k, J_DEF);
+// métiers où l'on plante (graines/boutures) : la plantation donne la même XP de base que la récolte
+const PLANTABLE = ['paysan', 'forestier', 'herboriste'];
+// bonus d'XP de plantation : région, Havre-Monde, Source de Wakfu, autre (Stasis et Turbo ne concernent que la récolte)
+function bonusPlant() {
+  const g = bg();
+  return (g.region ?? 0) + (g.havre ? 10 : 0) + (+g.wakfu || 0) + (+g.xpExtra || 0);
+}
+const plantChance = () => Math.max(1, Math.min(100, +bg().plantPct || 70)) / 100;
+// cycle « champ perso » sur la ressource r au niveau L : tentatives de plantation (XP si réussite),
+// coupe de la plante, et récolte des graines nécessaires pour replanter (XP de récolte aussi)
+function fieldCycle(j, r, L, qAvg) {
+  const diff = Math.max(0, L - r.level), d = dur(j.key, diff, r), p = plantChance();
+  const plants = 1 / p, seedActs = plants / Math.max(qAvg, 0.01);
+  const acts = plants + 1 + seedActs;
+  const xp = XP.per(diff, bonusPlant()) + XP.per(diff, bonusXp()) * (1 + seedActs);
+  return { r, d, plants, seedActs, acts, time: acts * d, xp };
+}
+function bestField(j, L, qAvg) {
+  if (!PLANTABLE.includes(j.key)) return null;
+  let best = null;
+  for (const r of j.resources) {
+    if (r.level > L || !(r.seed || []).length || !XP.mult(L - r.level)) continue;
+    const c = fieldCycle(j, r, L, qAvg);
+    if (!best || c.xp / c.time > best.xp / best.time) best = c;
+  }
+  return best;
+}
+
 function bonusXp() {
   const g = bg();
   return (g.region ?? 0) + (g.havre ? 10 : 0) + (+g.stasis || 0) + (g.turbo ? 100 : 0) + (+g.xpExtra || 0);
@@ -203,11 +231,21 @@ function harvestPlan(j, from, xp0, to, strat) {
     const b = bestAt(j, L);
     if (!b || !b.m) return { actions: Infinity, time: Infinity, xp: XP.total(to) - XP.total(from) - xp0, res, crafts };
     let best = { rate: XP.per(L - b.r.level, bonus) / b.d, kind: 'h' };
+    if (strat === 'plant') {
+      const f = bestField(j, L, qAvg);
+      if (f) best = { rate: f.xp / f.time, kind: 'p', f };
+    }
     if (data) for (const r of data.recipes) {
       const c = craftCycle(j, r, L, qAvg, bonus);
       if (c && c.cx / c.ct > best.rate) best = { rate: c.cx / c.ct, kind: 'c', ...c };
     }
-    if (best.kind === 'h') {
+    if (best.kind === 'p') {
+      const f = best.f, cycles = need / f.xp;
+      actions += cycles * f.acts; time += cycles * f.time;
+      addTo(res, f.r.name, cycles, { r: f.r, items: 0, plants: 0, seedActs: 0 });
+      const o = res.get(f.r.name);
+      o.items += cycles * qAvg; o.plants += cycles * f.plants; o.seedActs += cycles * f.seedActs;
+    } else if (best.kind === 'h') {
       const n = Math.ceil(need / XP.per(L - b.r.level, bonus));
       actions += n; time += n * b.d;
       addTo(res, b.r.name, n, { r: b.r, items: 0 });
@@ -287,4 +325,4 @@ function profitRows(j, opts) {
   return rows;
 }
 
-export { XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
+export { PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };

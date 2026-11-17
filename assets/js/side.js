@@ -1,9 +1,9 @@
 // Waktool — module side
-import { st } from './state.js?v=e4e1de4b';
-import { $, changed, esc, fmt, fmt1, fmtK, sec, sj, store } from './util.js?v=e4e1de4b';
-import { HARVEST, REGION, XP, activeTool, bestAt, bg, bjob, bonusXp, climate, levelOf, price, qtyStats } from './model.js?v=e4e1de4b';
-import { renderJobCard } from './metiers.js?v=e4e1de4b';
-import { job, renderPage } from './main.js?v=e4e1de4b';
+import { st } from './state.js?v=f108e1bb';
+import { $, changed, esc, fmt, fmt1, fmtK, sec, sj, store } from './util.js?v=f108e1bb';
+import { HARVEST, REGION, XP, activeTool, bestAt, bg, bjob, bonusXp, climate, levelOf, price, qtyStats } from './model.js?v=f108e1bb';
+import { renderJobCard } from './metiers.js?v=f108e1bb';
+import { job, renderPage } from './main.js?v=f108e1bb';
 // ================================================================ panneau Bonus (colonne de droite)
 const chk = (id, on, label, extra = '') => `<label class="bchk"><input type="checkbox" data-b="${id}" ${on ? 'checked' : ''}> ${label}${extra}</label>`;
 const selB = (id, val, opts) => `<select data-b="${id}">${opts.map(([v, l]) => `<option value="${v}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
@@ -28,6 +28,7 @@ function situationHtml(j) {
     <div class="bgrp"><h5>Météo <small>(touche X en jeu)</small></h5>
       <label class="bchk">Température <span class="unit"><input type="number" data-b="g:temp" value="${g.temp ?? ''}" placeholder="—" min="-40" max="60"><i>°C</i></span>
         ${j && g.temp !== null && g.temp !== '' && j.resources.some(r => r.temp) ? climCount(j) : ''}</label>
+      <label class="bchk" title="70 % normalement, 56 % si l'humidité ne convient pas à la plante, 60 % en Havre-Sac">Chance de plantation <span class="unit"><input type="number" data-b="g:plantPct" value="${+g.plantPct || 70}" min="1" max="100"><i>%</i></span></label>
       <label class="bchk">Ralentissement hors plage <span class="unit"><input type="number" data-b="g:climMalus" value="${+g.climMalus || 0}" min="0" max="300"><i>%</i></span>
         <em class="warn-txt" title="Valeur non publiée par Ankama : à ajuster selon tes mesures en jeu">estim.</em></label>
       ${j && !j.resources.some(r => r.temp) ? '<p class="meta">Pas d’effet de la météo sur ce métier.</p>' : ''}
@@ -38,8 +39,9 @@ function globalMoreHtml() {
   return `
     <div class="bgrp"><h5>XP</h5>
       ${chk('g:havre', g.havre, 'Havre-Monde', ' <em>+10 %</em>')}
-      <label class="bchk">Source de Stasis ${selB('g:stasis', g.stasis, [[0, 'non'], [10, '+10 %'], [20, '+20 %']])}</label>
-      ${chk('g:turbo', g.turbo, 'Turbo Craft 30', ' <em>+100 %</em>')}
+      <label class="bchk">Source de Stasis ${selB('g:stasis', g.stasis, [[0, 'non'], [10, '+10 %'], [20, '+20 %']])} <em>récolte</em></label>
+      <label class="bchk">Source de Wakfu ${selB('g:wakfu', g.wakfu, [[0, 'non'], [20, '+20 %'], [30, '+30 %'], [40, '+40 %']])} <em>plantation</em></label>
+      ${chk('g:turbo', g.turbo, 'Turbo Craft 30', ' <em>+100 % récolte</em>')}
       <label class="bchk">Autre <span class="unit"><input type="number" data-b="g:xpExtra" value="${+g.xpExtra || ''}" placeholder="0"><i>%</i></span></label>
     </div>
     <div class="bgrp"><h5>Quantité (tous métiers)</h5>

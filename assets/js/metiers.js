@@ -1,10 +1,10 @@
 // Waktool — module metiers
-import { st } from './state.js?v=e4e1de4b';
-import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=e4e1de4b';
-import { PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=e4e1de4b';
-import { renderSide } from './side.js?v=e4e1de4b';
-import { renderProfit } from './profit.js?v=e4e1de4b';
-import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=e4e1de4b';
+import { st } from './state.js?v=f108e1bb';
+import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=f108e1bb';
+import { PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=f108e1bb';
+import { renderSide } from './side.js?v=f108e1bb';
+import { renderProfit } from './profit.js?v=f108e1bb';
+import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=f108e1bb';
 // ================================================================ page Métiers
 const q = $('#q'), only = $('#only');
 only.checked = store.get('only') === '1';
@@ -215,25 +215,32 @@ function harvestPlanHtml(j) {
   const strat = store.get('strat.' + j.key) || 'harvest';
   if (strat === 'craft' && !needRecipes(j.key)) return '<p class="empty">Chargement des recettes…</p>';
   const xp = Math.min(xpOf(j.key), XP.need(L) - 1);
-  const pl = harvestPlan(j, L, xp, tg, strat), alt = harvestPlan(j, L, xp, tg, strat === 'craft' ? 'harvest' : 'craft');
+  const pl = harvestPlan(j, L, xp, tg, strat), alt = harvestPlan(j, L, xp, tg, strat === 'harvest' ? 'craft' : 'harvest');
   const qa = qtyStats(j).avg;
   const nCraft = [...pl.crafts.values()].reduce((a, c) => a + Math.ceil(c.n), 0);
   let kam = 0;
   const resRows = [...pl.res.values()].sort((a, b) => a.r.level - b.r.level).map(o => {
     const main = (o.r.normal || [])[0], p = main && price(main.id);
-    if (p && strat === 'harvest') kam += o.items * p;
+    if (p && strat !== 'craft') kam += o.items * p;
+    if (strat === 'plant') {
+      return `<li>${icon({ icon: o.r.appearance || (main || {}).icon, name: o.r.name })}<span><b>${esc(o.r.name)}</b> <small>niv. ${o.r.level}</small><br>
+        <small><b>${fmt(Math.ceil(o.plants))}</b> plantations · <b>${fmt(Math.ceil(o.n))}</b> coupes · <b>${fmt(Math.ceil(o.seedActs))}</b> récoltes de graines
+        → ≈ ${fmt(o.items)} ${esc((main || {}).name || 'ressources')}${p ? ` · ${fmtK(o.items * p)}` : ''}</small></span></li>`;
+    }
     return `<li>${icon({ icon: o.r.appearance || (main || {}).icon, name: o.r.name })}<span><b>${fmt(Math.ceil(o.n))}</b> récoltes · ${esc(o.r.name)} <small>niv. ${o.r.level}</small><br>
       <small>≈ ${fmt(o.items)} ${esc((main || {}).name || 'ressources')}${p && strat === 'harvest' ? ` · ${fmtK(o.items * p)}` : ''}</small></span></li>`;
   }).join('');
   return `<div class="panel">
     <div class="panel-head">
       <h3>Niv. ${L} → ${tg}</h3>
-      ${segHtml('strat', strat, [['harvest', 'Récolte seule'], ['craft', 'Récolte + craft', 'Transformer les ressources récoltées quand c’est plus rentable en XP']])}
+      ${segHtml('strat', strat, [['harvest', 'Récolte', 'Récolter les ressources déjà présentes dans la nature'],
+        ...(PLANTABLE.includes(j.key) ? [['plant', 'Champ perso', 'Planter, couper et récolter les graines pour replanter (autonome)']] : []),
+        ['craft', 'Récolte + craft', 'Transformer les ressources récoltées quand c’est plus rentable en XP']])}
     </div>
     <div class="kpis">
       <div class="kpi"><span>XP à gagner</span><b>${fmt(pl.xp)}</b></div>
-      <div class="kpi"><span>Récoltes</span><b>${fmt(pl.actions)}</b>${nCraft ? `<small>+ ${fmt(nCraft)} crafts</small>` : ''}</div>
-      <div class="kpi"><span>Durée estimée</span><b>~${fmtDur(pl.time)}</b>${isFinite(alt.time) && alt.time !== pl.time ? `<small>${strat === 'craft' ? 'récolte seule' : 'avec craft'} : ~${fmtDur(alt.time)}</small>` : ''}</div>
+      <div class="kpi"><span>${strat === 'plant' ? 'Actions' : 'Récoltes'}</span><b>${fmt(pl.actions)}</b>${nCraft ? `<small>+ ${fmt(nCraft)} crafts</small>` : strat === 'plant' ? '<small>plantations + coupes + graines</small>' : ''}</div>
+      <div class="kpi"><span>Durée estimée</span><b>~${fmtDur(pl.time)}</b>${isFinite(alt.time) && alt.time !== pl.time ? `<small>${strat === 'harvest' ? 'avec craft' : 'récolte seule'} : ~${fmtDur(alt.time)}</small>` : ''}</div>
       ${kam ? `<div class="kpi"><span>Valeur récoltée</span><b class="kph">${fmtK(kam)}</b><small>au prix HDV</small></div>` : ''}
     </div>
     <div class="cols">
@@ -241,7 +248,8 @@ function harvestPlanHtml(j) {
       ${pl.crafts.size ? `<div><h4>À crafter <small>(atelier du métier)</small></h4><ul class="plist">${craftListHtml(pl.crafts)}</ul></div>` : ''}
     </div>
     <p class="meta">Estimation avec ${fmt1(qa)} ressources par récolte et les bonus actifs, sans déplacements.
-      ${strat === 'craft' ? 'XP des recettes = valeur de base du jeu (à confirmer en jeu).' : ''}</p>
+      ${strat === 'craft' ? 'XP des recettes = valeur de base du jeu (à confirmer en jeu).' : ''}
+      ${strat === 'plant' ? `Champ perso : ${Math.round(plantChance() * 100)} % de réussite de plantation, même XP de base qu’une récolte (bonus de plantation : ${bonusPlant() >= 0 ? '+' : ''}${bonusPlant()} %). Temps de pousse non compté.` : ''}</p>
   </div>`;
 }
 
@@ -287,15 +295,16 @@ $('#list').addEventListener('change', e => {
 function pricesHtml(j) {
   const P = PRICES(), L = levelOf(j.key);
   const row = (r, it, kind) => it && it.id ? `<tr class="${L !== null && r.level > L ? 'locked' : ''}">
-    <td class="num">${r.level}</td><td>${icon(it)} ${esc(it.name)} <small class="kind">${kind}</small></td>
-    <td>${priceInput(it)}</td><td class="meta">${P[it.id] ? ago(P[it.id][1]) : '—'}</td></tr>` : '';
+    <td class="num lvl">${r.level}</td>
+    <td><div class="pcell">${icon(it)}<div><b>${esc(it.name)}</b><small>${kind}${P[it.id] ? ` · ${ago(P[it.id][1])}` : ''}</small></div></div></td>
+    <td class="num">${priceInput(it)}</td></tr>` : '';
   const n = j.resources.reduce((a, r) => a + [...(r.normal || []), ...(r.seed || []), ...(r.rare || [])].filter(it => P[it.id]).length, 0);
   return `<div class="panel">
     <div class="panel-head"><h3>Prix HDV · ${esc(j.label)}</h3><span class="meta">${n} prix connus</span></div>
     <p class="meta">Prix unitaires. Le plus simple : colle une capture de l’Hôtel des ventes avec <kbd>Ctrl</kbd>+<kbd>V</kbd> (n’importe où sur le site), les prix se remplissent tout seuls.</p>
-    <table class="ptable"><thead><tr><th>Niv.</th><th>Objet</th><th>Prix ₭</th><th>Mis à jour</th></tr></thead><tbody>
+    <div class="tablewrap"><table class="ptable prices"><thead><tr><th>Niv.</th><th>Objet</th><th class="num">Prix ₭</th></tr></thead><tbody>
     ${j.resources.map(r => (r.normal || []).map(it => row(r, it, 'ressource')).join('') + (r.rare || []).map(it => row(r, it, 'rare')).join('') + (r.seed || []).map(it => row(r, it, j.key === 'forestier' ? 'bouture' : 'graine')).join('')).join('')}
-    </tbody></table></div>`;
+    </tbody></table></div></div>`;
 }
 // saisie d'un prix (n'importe où)
 document.addEventListener('change', e => {

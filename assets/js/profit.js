@@ -1,9 +1,9 @@
 // Waktool — module profit
-import { st } from './state.js?v=e4e1de4b';
-import { $, esc, fmt, fmtK, icon, norm, sj } from './util.js?v=e4e1de4b';
-import { HARVEST, PRICES, RD, XP, levelOf, loadRecipes, priceInput, profitRows } from './model.js?v=e4e1de4b';
-import { chk } from './side.js?v=e4e1de4b';
-import { segHtml } from './metiers.js?v=e4e1de4b';
+import { st } from './state.js?v=f108e1bb';
+import { $, esc, fmt, fmtK, icon, norm, sj } from './util.js?v=f108e1bb';
+import { HARVEST, PRICES, RD, XP, levelOf, loadRecipes, priceInput, profitRows } from './model.js?v=f108e1bb';
+import { chk } from './side.js?v=f108e1bb';
+import { segHtml } from './metiers.js?v=f108e1bb';
 // ================================================================ page Rentabilité
 function renderProfit() {
   const el = $('#page-rentabilite');
@@ -25,10 +25,10 @@ function renderProfit() {
     <td class="num rank">${i + 1}</td>
     <td><div class="pcell">${icon(r.it)}<div><b>${esc(r.it.name)}</b><small>${r.kind === 'transformé'
       ? `⚒ ${r.parts.map(p => `${fmt(p.qty)}× ${esc(p.item.name)}`).join(' + ')}`
-      : `${esc(r.r.name)} · ${r.kind}`}</small></div></div></td>
-    <td><span class="jchip" style="--c:${r.j.color}"><img src="${r.j.icon}" alt="">${esc(r.j.label)} ${r.r.level}</span></td>
+      : `${esc(r.r.name)} · ${r.kind}`}<span class="mob"> · ${esc(r.j.label)} ${r.r.level}</span></small></div></div></td>
+    <td class="col-job"><span class="jchip" style="--c:${r.j.color}"><img src="${r.j.icon}" alt="">${esc(r.j.label)} ${r.r.level}</span></td>
     <td class="num">${priceInput(r.it, 'small')}</td>
-    <td class="num">${fmt(r.qph)}</td>
+    <td class="num col-qty">${fmt(r.qph)}</td>
     <td class="num bar" style="--w:${(r.xph / maxX * 100).toFixed(1)}%">${fmt(r.xph)}</td>
     <td class="num bar k" style="--w:${r.kph !== null ? (r.kph / maxK * 100).toFixed(1) : 0}%"><b>${r.kph !== null ? fmtK(r.kph) : '—'}</b></td>
   </tr>`;
@@ -53,7 +53,7 @@ function renderProfit() {
     </div>
     ${!withLvl.length && o.access ? '<p class="empty">Renseigne tes niveaux (onglet Métiers ou capture de la fenêtre Métiers) pour voir ce que tu peux farmer.</p>' : ''}
     <div class="tablewrap"><table class="ptable profit">
-      <thead><tr><th>#</th><th>Produit</th><th>Métier</th><th>Prix u.</th><th>Qté/h</th><th>XP/h</th><th>Kamas/h</th></tr></thead>
+      <thead><tr><th>#</th><th>Produit</th><th class="col-job">Métier</th><th class="num">Prix u.</th><th class="num col-qty">Qté/h</th><th class="num">XP/h</th><th class="num">Kamas/h</th></tr></thead>
       <tbody>${priced.slice(0, 150).map(line).join('')}</tbody>
     </table></div>
     ${unpriced.length ? `<details class="panel" ${priced.length ? '' : 'open'}><summary><b>Sans prix (${unpriced.length})</b> — renseigne un prix pour les classer</summary>

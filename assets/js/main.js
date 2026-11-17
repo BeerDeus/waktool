@@ -1,11 +1,11 @@
 // Waktool — module main
-import { st } from './state.js?v=e4e1de4b';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=e4e1de4b';
-import { ALL, CRAFTS, HARVEST, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=e4e1de4b';
-import { renderSide } from './side.js?v=e4e1de4b';
-import { only, renderJobCard, renderMetiers } from './metiers.js?v=e4e1de4b';
-import { renderProfit } from './profit.js?v=e4e1de4b';
-import { renderSession, sess } from './session.js?v=e4e1de4b';
+import { st } from './state.js?v=f108e1bb';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=f108e1bb';
+import { ALL, CRAFTS, HARVEST, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=f108e1bb';
+import { renderSide } from './side.js?v=f108e1bb';
+import { only, renderJobCard, renderMetiers } from './metiers.js?v=f108e1bb';
+import { renderProfit } from './profit.js?v=f108e1bb';
+import { renderSession, sess } from './session.js?v=f108e1bb';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');
