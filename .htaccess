@@ -9,7 +9,7 @@ AddType application/manifest+json .webmanifest
   </FilesMatch>
 </IfModule>
 # fichiers internes du dépôt
-<FilesMatch "^(\.firebaserc|firebase\.json|firestore\.rules|README\.md)$">
+<FilesMatch "^(\.firebaserc|firebase\.json|firestore\.rules|README\.md|package(-lock)?\.json)$">
   Require all denied
 </FilesMatch>
-RedirectMatch 404 ^/(scripts|\.github|\.git)(/|$)
+RedirectMatch 404 ^/(scripts|tests|node_modules|\.github|\.git)(/|$)

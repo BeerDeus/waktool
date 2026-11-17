@@ -1,0 +1,11 @@
+{
+  "name": "waktool",
+  "private": true,
+  "description": "Site Waktool (métiers Wakfu) — tests automatiques",
+  "scripts": {
+    "test": "playwright test -c tests/playwright.config.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

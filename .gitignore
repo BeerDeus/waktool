@@ -1,3 +1,6 @@
-.DS_Store
 *.part
+.DS_Store
 __pycache__/
+node_modules/
+playwright-report/
+test-results/

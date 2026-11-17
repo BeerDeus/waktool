@@ -52,3 +52,13 @@ les valeurs non unanimes sont signalées « ? » avant enregistrement.
 
 Le CDN Hostinger met en cache les assets : avant de committer une modif de `assets/` ou `data/`, lancer
 `python3 scripts/cachebust.py` (ajoute `?v=<hash>` dans `index.html`).
+
+## Tests et mise en ligne
+
+- `npm install` puis `npm test` : tests Playwright (calculs d'XP relevés en jeu, lecture de vraies captures du jeu —
+  fenêtre Métiers, bulles d'XP, Hôtel des ventes —, rendu des pages sur PC et mobile).
+- Workflow **Tests et mise en ligne** : à chaque push sur `main` (et après chaque mise à jour automatique des données),
+  les tests tournent ; s'ils passent, `main` est copié sur la branche **`live`**, que Hostinger déploie.
+  Un code cassé reste donc sur `main` sans jamais atteindre le site.
+- Code du site : modules ES dans `assets/js/` (`util`, `model`, `state`, `main`, `metiers`, `profit`, `zones`,
+  `session`, `side`), sans étape de build. Après une modif de `assets/` ou `data/` : `python3 scripts/cachebust.py`.

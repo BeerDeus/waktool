@@ -1,0 +1,57 @@
+name: Tests et mise en ligne
+
+# Hostinger déploie la branche `live`. Elle ne reçoit le code de `main` que si tous les tests passent :
+# un code cassé ne peut donc pas arriver sur le site.
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: ['Mise à jour des données Wakfu']
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-live
+  cancel-in-progress: true
+
+jobs:
+  test:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Dépendances
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Tests (calculs, lecture des captures, pages PC + mobile)
+        run: npm test
+        env:
+          CI: '1'
+
+      - name: Rapport en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-tests
+          path: test-results/
+          retention-days: 7
+
+      - name: Mise en ligne (branche live)
+        run: |
+          git push origin HEAD:refs/heads/live --force
+          echo "Mise en ligne de $(git rev-parse --short HEAD) : $(git log -1 --format=%s)" >> "$GITHUB_STEP_SUMMARY"
