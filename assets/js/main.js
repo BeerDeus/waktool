@@ -1,12 +1,12 @@
 // Waktool — module main
-import { st } from './state.js?v=70ddc189';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=70ddc189';
-import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=70ddc189';
-import { renderSide } from './side.js?v=70ddc189';
-import { only, renderJobCard, renderMetiers } from './metiers.js?v=70ddc189';
-import { renderProfit } from './profit.js?v=70ddc189';
-import { renderZones } from './zones.js?v=70ddc189';
-import { renderSession, sess } from './session.js?v=70ddc189';
+import { st } from './state.js?v=da63b72b';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=da63b72b';
+import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=da63b72b';
+import { renderSide } from './side.js?v=da63b72b';
+import { only, renderJobCard, renderMetiers } from './metiers.js?v=da63b72b';
+import { renderProfit } from './profit.js?v=da63b72b';
+import { renderZones } from './zones.js?v=da63b72b';
+import { renderSession, sess } from './session.js?v=da63b72b';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');
@@ -185,7 +185,11 @@ window.waktool = {
     });
     renderAll();
   },
-  setLevels(levels) { this.applyState({ levels }); changed(); },
+  // niveaux saisis par l'utilisateur (import de capture) : l'XP actuelle repart de 0 pour chaque niveau qui change
+  setLevels(levels) {
+    for (const [k, v] of Object.entries(levels)) if (levelOf(k) !== +v) store.set('xp.' + k, '0');
+    this.applyState({ levels }); changed();
+  },
   setXp(key, xp) { store.set('xp.' + key, String(xp)); renderAll(); changed(); },
   onChange(f) { listeners.push(f); },
   jobs: () => ALL.map(j => ({ key: j.key, label: j.label, icon: j.icon, type: j.type })),

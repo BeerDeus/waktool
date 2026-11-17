@@ -56,3 +56,19 @@ test('artisanat : recettes et liste de courses détaillée', async ({ page }) =>
   await expect(page.locator('#list')).toContainText('Intermédiaires');
   await expect(page.locator('#list .shop li').first()).toBeVisible();
 });
+
+test('changer de niveau remet l’XP actuelle à 0 (saisie et import)', async ({ page }) => {
+  await seed(page, { ...STATE, 'xp.paysan': '1200', 'xp.herboriste': '500', 'lvl.herboriste': '17' });
+  await page.goto('/?x#paysan');
+  await page.fill('[data-jc="lvl"]', '31');
+  await page.press('[data-jc="lvl"]', 'Enter');
+  await expect(page.locator('[data-jc="xp"]')).toHaveValue('0');
+  expect(await page.evaluate(() => localStorage.getItem('waktool.xp.paysan'))).toBe('0');
+  // import : seul le niveau qui change voit son XP remise à 0
+  await page.evaluate(() => window.waktool.setLevels({ herboriste: 17, trappeur: 11 }));
+  const r = await page.evaluate(() => [localStorage.getItem('waktool.xp.herboriste'), localStorage.getItem('waktool.xp.trappeur')]);
+  expect(r).toEqual(['500', '0']);
+  // la synchronisation du compte ne touche pas à l'XP
+  await page.evaluate(() => window.waktool.applyState({ levels: { paysan: 32 }, progress: { paysan: { xp: 777 } } }));
+  expect(await page.evaluate(() => localStorage.getItem('waktool.xp.paysan'))).toBe('777');
+});
