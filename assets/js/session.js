@@ -1,10 +1,10 @@
 // Waktool — module session : chrono de farm, estimation en direct, compteurs, bilan, historique
-import { st } from './state.js?v=895eb43b';
-import { $, changed, clock, esc, fmt, fmtK, icon, jget, sec, sj, store } from './util.js?v=895eb43b';
-import { PLANTABLE, XP, bestAt, bonusPlant, bonusXp, dur, fieldCycle, getJob, levelOf, lvlKey, price, qtyStats, xpOf } from './model.js?v=895eb43b';
-import { renderSide } from './side.js?v=895eb43b';
-import { go, job, renderTabs } from './main.js?v=895eb43b';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, endSession } from './chatlog.js?v=895eb43b';
+import { st } from './state.js?v=ce18e5b8';
+import { $, changed, clock, esc, fmt, fmtK, icon, jget, sec, sj, store } from './util.js?v=ce18e5b8';
+import { PLANTABLE, XP, bestAt, bonusPlant, bonusXp, dur, fieldCycle, getJob, levelOf, lvlKey, price, qtyStats, xpOf } from './model.js?v=ce18e5b8';
+import { renderSide } from './side.js?v=ce18e5b8';
+import { go, job, renderTabs } from './main.js?v=ce18e5b8';
+import { CRAFTED, ITEMS, chatCfgChange, chatClick, chatPanelHtml, endSession } from './chatlog.js?v=ce18e5b8';
 
 const S_DEF = { job: null, res: null, prod: null, mode: 'wild', eff: 80, plan: 60, start: null, acc: 0, cnt: { h: 0, p: 0 }, notify: false, notified: false, done: null };
 const sess = () => { const s = sj.get('session', S_DEF); s.cnt ||= { h: 0, p: 0 }; return s; };
@@ -81,13 +81,16 @@ function finish(c, o) {
 function estimateReal(c, s) {
   const R = s.real, L = levelOf(s.job) ?? R.L0 ?? 0;
   const o = finish(c, { h: R.h, p: R.p, xp: R.xp, items: 0, from: R.L0 ?? L, L, x: xpOf(s.job), mode: 'log' });
-  let qty = 0, kamas = 0, priced = 0;
+  // valeur nette : objets ramassés et fabriqués − ingrédients consommés par les crafts
+  const cr = R.crafted || {}, us = R.used || {};
+  let qty = 0, kamas = 0, priced = 0, n0 = 0;
   for (const [name, n] of Object.entries(R.items)) {
-    qty += n;
-    const it = ITEMS[name], p = it && price(it.id);
-    if (p) { kamas += n * p; priced += n; }
+    const it = ITEMS[name] || CRAFTED[name], p = it && price(it.id);
+    if (!cr[name]) { qty += n; if (p) priced += n; }
+    if (p) { kamas += n * p; n0++; }
   }
-  return { ...o, qty, kamas: priced ? kamas : null, priced, fail: R.fail };
+  for (const [name, n] of Object.entries(us)) { const it = ITEMS[name], p = it && price(it.id); if (p) kamas -= n * p; }
+  return { ...o, qty, kamas: n0 ? kamas : null, priced, fail: R.fail, crafts: Object.values(cr).reduce((a, b) => a + b, 0), craftXp: R.craftXp || 0 };
 }
 const estimate = (c, s, ms) => (s.real ? estimateReal(c, s) : counted(s) ? estimateCount(c, s.cnt) : estimateTime(c, ms, s.eff));
 
@@ -95,8 +98,8 @@ function statsHtml(e) {
   if (!e) return '<p class="empty">Aucune ressource accessible.</p>';
   const lvUp = e.after.level - e.from;
   return `<div class="kpis big">
-    <div class="kpi"><span>${e.mode === 'log' ? 'Lues dans le chat' : e.mode === 'count' ? 'Comptées' : 'Actions estimées'}</span><b>${fmt(e.h)}${e.p >= 0.5 ? ` + ${fmt(e.p)}` : ''}</b><small>${e.p >= 0.5 ? `récoltes + plantations${e.fail ? ` · ${fmt(e.fail)} ratée${e.fail > 1 ? 's' : ''}` : ''}` : `récoltes · ${sec(e.d)} s / action`}</small></div>
-    <div class="kpi"><span>XP gagnée</span><b>${fmt(e.xp)}</b><small>${e.mode === 'log' ? `${fmt(e.actions ? e.xp / e.actions : 0)} XP / action (réel)` : `${fmt(e.per)} XP / récolte`}</small></div>
+    <div class="kpi"><span>${e.mode === 'log' ? 'Lues dans le chat' : e.mode === 'count' ? 'Comptées' : 'Actions estimées'}</span><b>${fmt(e.h)}${e.p >= 0.5 ? ` + ${fmt(e.p)}` : ''}</b><small>${e.p >= 0.5 ? `récoltes + plantations${e.fail ? ` · ${fmt(e.fail)} ratée${e.fail > 1 ? 's' : ''}` : ''}` : e.mode === 'log' ? 'récoltes' : `récoltes · ${sec(e.d)} s / action`}${e.crafts ? ` · ${fmt(e.crafts)} fabriqués` : ''}</small></div>
+    <div class="kpi"><span>XP gagnée</span><b>${fmt(e.xp)}</b><small>${e.mode === 'log' ? `${fmt(e.actions ? (e.xp - e.craftXp) / e.actions : 0)} XP / action (réel)${e.craftXp ? ` · dont ${fmt(e.craftXp)} en craft` : ''}` : `${fmt(e.per)} XP / récolte`}</small></div>
     <div class="kpi"><span>Niveau</span><b>${e.from} → ${e.after.level}${lvUp ? ` <em class="pos">+${lvUp}</em>` : ''}</b><small>${fmt(e.after.xp)} / ${fmt(XP.need(e.after.level))} XP${e.target ? ` · objectif ${e.target}` : ''}</small></div>
     <div class="kpi"><span>Ressources</span><b>${fmt(e.qty)}</b><small>${e.mode === 'log' ? 'ramassées (chat)' : e.mode === 'count' ? 'estimées depuis tes récoltes' : 'estimées'}</small></div>
     <div class="kpi"><span>Kamas estimés</span><b class="kph">${e.kamas !== null ? fmtK(e.kamas) : '—'}</b><small>${e.mode === 'log' ? (e.priced < e.qty ? `${fmt(e.priced)} / ${fmt(e.qty)} objets avec prix HDV` : 'prix HDV') : e.unit ? `${fmt(e.unit)} ₭ / u` : 'pas de prix HDV'}</small></div>
@@ -192,8 +195,8 @@ function updateTitle() {
 
 // objets ramassés pendant la session (journal du chat) + objectifs de quantité
 function itemsHtml(s, c) {
-  const got = (s.real && s.real.items) || {}, goals = s.goals || {};
-  const names = [...new Set([...Object.keys(got), ...Object.keys(goals)])];
+  const got = (s.real && s.real.items) || {}, goals = s.goals || {}, cr = (s.real && s.real.crafted) || {}, us = (s.real && s.real.used) || {};
+  const names = [...new Set([...Object.keys(got), ...Object.keys(goals), ...Object.keys(us)])];
   const opts = [];
   c.avail.slice().reverse().forEach(r => [...(r.normal || []), ...(r.rare || []), ...(r.seed || [])].forEach(it => {
     if (it && it.name && !names.includes(it.name) && !opts.includes(it.name)) opts.push(it.name);
@@ -203,12 +206,12 @@ function itemsHtml(s, c) {
       <label class="goal-add">Ajouter un objectif <select data-goaladd><option value="">— objet —</option>${opts.map(n => `<option>${esc(n)}</option>`).join('')}</select></label></div>`;
   }
   const rows = names.sort((a, b) => (got[b] || 0) - (got[a] || 0)).map(n => {
-    const it = ITEMS[n] || { name: n }, q = got[n] || 0, g = goals[n] || 0, p = it.id && price(it.id);
+    const it = ITEMS[n] || CRAFTED[n] || { name: n }, q = got[n] || 0, g = goals[n] || 0, p = it.id && price(it.id), u = us[n] || 0;
     const pct = g ? Math.min(100, q / g * 100) : 0;
-    return `<tr class="${g && q >= g ? 'goal-ok' : ''}"><td class="it">${icon({ ...it, name: n }, 'ico')}<span>${esc(n)}</span></td>
-      <td class="num"><b>${fmt(q)}</b></td>
+    return `<tr class="${g && q >= g ? 'goal-ok' : ''}"><td class="it">${icon({ ...it, name: n }, 'ico')}<span>${esc(n)}${cr[n] ? ' <small class="kind">fabriqué</small>' : ''}</span></td>
+      <td class="num"><b>${fmt(q)}</b>${u ? `<br><small class="neg" title="Utilisés dans tes crafts">−${fmt(u)}</small>` : ''}</td>
       <td><span class="unit goal-in"><input type="number" min="0" inputmode="numeric" data-goal="${esc(n)}" value="${g || ''}" placeholder="objectif"></span>${g ? `<div class="gbar"><i style="width:${pct}%"></i></div>` : ''}</td>
-      <td class="num">${p ? fmtK(q * p) : '—'}</td></tr>`;
+      <td class="num">${p ? fmtK((q - u) * p) : '—'}</td></tr>`;
   }).join('');
   return `<div class="panel"><h4>Objets ramassés <small>· objectifs avec alerte</small></h4>
     <div class="tablewrap"><table class="ptable items-t"><thead><tr><th>Objet</th><th>Qté</th><th>Objectif</th><th>Valeur</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="meta">Rien pour l’instant.</td></tr>'}</tbody></table></div>

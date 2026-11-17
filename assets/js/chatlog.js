@@ -1,12 +1,12 @@
 // Waktool — journal du chat Wakfu (wakfu_chat.log) lu en direct, dans le navigateur uniquement.
 // Seules les lignes « [Information (jeu)] » sont lues (XP de métier, objets ramassés, plantations) :
 // les canaux de discussion (Commerce, Guilde, messages privés…) sont ignorés et rien n'est envoyé nulle part.
-import { st } from './state.js?v=895eb43b';
-import { $, changed, esc, fmt, norm, sj, store } from './util.js?v=895eb43b';
-import { ALL, HARVEST, PLANTABLE, XP, getJob, levelOf, lvlKey, resOfItem, xpOf } from './model.js?v=895eb43b';
-import { job, renderTabs } from './main.js?v=895eb43b';
-import { renderJobCard } from './metiers.js?v=895eb43b';
-import { refreshSession, sess, setSess } from './session.js?v=895eb43b';
+import { st } from './state.js?v=ce18e5b8';
+import { $, changed, esc, fmt, norm, sj, store } from './util.js?v=ce18e5b8';
+import { ALL, HARVEST, PLANTABLE, XP, allItems, getJob, levelOf, lvlKey, resOfItem, xpOf } from './model.js?v=ce18e5b8';
+import { job, renderTabs } from './main.js?v=ce18e5b8';
+import { renderJobCard } from './metiers.js?v=ce18e5b8';
+import { refreshSession, sess, setSess } from './session.js?v=ce18e5b8';
 
 // ================================================================ analyse d'une ligne
 const N = '([\\d\\s\\u00a0\\u202f]+)';
@@ -15,6 +15,7 @@ const RE_XP = new RegExp(`^(.+?) : \\+${N} points d'XP\\.\\s*(?:\\+(\\d+) niveau
 const RE_GOT = /^Vous avez ramassé (\d+)x (.+?)\s*\.$/;
 const RE_LOST = /^Vous avez perdu (\d+)x (.+?)\s*\.$/;
 const RE_FAIL = /^Le plant n'a pas pris/;
+const RE_CRAFT = /^Vous avez réussi votre recette de (.+?)\.?$/;
 const int = s => +String(s).replace(/\D/g, '');
 
 const JOB_BY_LABEL = Object.fromEntries(ALL.map(j => [norm(j.label), j.key]));
@@ -24,6 +25,16 @@ HARVEST.forEach(j => j.resources.forEach(r => ['normal', 'rare', 'seed'].forEach
   const o = ITEMS[it.name] ||= { id: it.id, icon: it.icon, job: j.key, seed: false };
   if (k === 'seed') o.seed = true;
 }))));
+
+// produits fabriqués : id / icône pris dans les recettes (chargées à la première ligne de craft)
+const CRAFTED = {};
+function learnCrafted(name) {
+  if (CRAFTED[name] || ITEMS[name]) return;
+  allItems().then(list => {
+    const it = list.find(x => x.name === name);
+    if (it) { CRAFTED[name] = { id: it.id, icon: it.icon }; refreshSession(); }
+  });
+}
 
 function parseLine(line) {
   const m = RE_LINE.exec(line);
@@ -35,7 +46,11 @@ function parseLine(line) {
     return k ? { type: 'xp', job: k, gain: int(x[2]), up: +(x[3] || 0), rem: int(x[4]), time: m[1] } : null;
   }
   if ((x = RE_GOT.exec(t))) return { type: 'got', n: +x[1], name: x[2].trim(), time: m[1] };
-  if ((x = RE_LOST.exec(t))) { const it = ITEMS[x[2].trim()]; return it && it.seed ? { type: 'plant', n: +x[1], name: x[2].trim(), job: it.job, time: m[1] } : null; }
+  if ((x = RE_LOST.exec(t))) {
+    const it = ITEMS[x[2].trim()], n = +x[1];
+    return { type: it && it.seed && n === 1 ? 'plant' : 'used', n, name: x[2].trim(), time: m[1] }; // 1 graine = plantation, sinon ingrédient
+  }
+  if ((x = RE_CRAFT.exec(t))) return { type: 'craft', name: x[1].trim(), time: m[1] };
   if (RE_FAIL.test(t)) return { type: 'fail', time: m[1] };
   return null;
 }
@@ -46,7 +61,6 @@ const cfg = () => sj.get('chat', C_DEF);
 const setCfg = o => sj.set('chat', { ...cfg(), ...o });
 const ui = { state: 'off', name: '', err: '', lastLine: 0, lastXp: null, summary: null, lines: 0 };
 let lastRem = {}; // dernier « prochain niveau dans » lu, par métier (pour déduire le niveau exact à la montée)
-let pend = null;  // ligne d'XP de la session pas encore classée (récolte ou plantation)
 let lastEvt = 0, idleWarned = false;
 const supported = () => 'showOpenFilePicker' in window && 'Worker' in window;
 
@@ -107,16 +121,25 @@ function alertUser(title, body) {
 }
 
 // ================================================================ session (comptage réel)
-function flushPend(kind) {
-  if (!pend) return;
+// Une ligne d'XP n'est classée qu'avec la suite :
+//   récolte    : XP → « ramassé Nx objet »
+//   plantation : XP → « perdu 1x graine »
+//   craft      : XP × n (une par craft, aucune si la recette est trop basse) → « perdu » ingrédients → « ramassé » produit → « réussi votre recette »
+let pend = [], gots = [], used = [];
+function resolve(kind) {
+  if (!pend.length && kind !== 'craft') return;
   const s = sess();
-  if (s.real) { s.real[kind] += 1; s.cnt = { h: s.real.h, p: s.real.p }; setSess(s); }
-  pend = null;
+  if (s.real) {
+    if (kind === 'p') { s.real.p += 1; s.real.h += pend.length - 1; }
+    else if (kind === 'h') s.real.h += pend.length;
+    s.cnt = { h: s.real.h, p: s.real.p };
+    setSess(s);
+  }
+  pend = []; gots = []; used = [];
 }
 function sessionEvent(ev, info, mode, notes) {
-  // la ligne qui suit une XP dit ce que c'était : « perdu 1x graine » = plantation, sinon récolte
-  if (ev.type === 'plant') { flushPend('p'); return; }
-  if (ev.type === 'xp' || ev.type === 'got') flushPend('h');
+  if (ev.type === 'plant') { resolve('p'); return; }
+  if (ev.type === 'xp' && gots.length) resolve('h');
   const s = sess(), c = cfg();
   if (ev.type === 'xp') {
     if (getJob(ev.job).type !== 'harvest') return;
@@ -134,12 +157,27 @@ function sessionEvent(ev, info, mode, notes) {
     s.real.xp += ev.gain;
     s.lastTs = ev.ts;
     setSess(s);
-    pend = ev;
+    pend.push(ev);
     return;
   }
   if (!s.start || !s.real) return;
   if (ev.type === 'fail') { s.real.fail += 1; setSess(s); return; }
+  if (ev.type === 'used') { used.push(ev); return; }
+  if (ev.type === 'craft') {
+    // produit fabriqué (déjà compté dans « ramassé ») + ingrédients consommés + XP de craft
+    const R = s.real, prod = gots.filter(g => g.name === ev.name).reduce((a, g) => a + g.n, 0);
+    R.crafted ||= {}; R.used ||= {};
+    R.crafted[ev.name] = (R.crafted[ev.name] || 0) + prod;
+    used.forEach(u => { R.used[u.name] = (R.used[u.name] || 0) + u.n; });
+    R.craftXp = (R.craftXp || 0) + pend.reduce((a, e) => a + e.gain, 0);
+    R.crafts = (R.crafts || 0) + 1;
+    learnCrafted(ev.name);
+    setSess(s);
+    resolve('craft');
+    return;
+  }
   if (ev.type === 'got') {
+    gots.push(ev);
     s.real.items[ev.name] = (s.real.items[ev.name] || 0) + ev.n;
     const it = ITEMS[ev.name];
     if (s.autoRes && it && it.job === s.job && !it.seed) {
@@ -214,6 +252,8 @@ function feed(lines, first = false, mod = Date.now()) {
       }
     } else if (mode !== 'silent') sessionEvent(ev, null, mode, notes);
   });
+  // fin de lot : XP suivie d'une ressource récoltable = récolte (un produit de craft attend sa ligne « réussi »)
+  if (pend.length && gots.length && gots.every(g => ITEMS[g.name])) resolve('h');
   if (lastTs) sj.set('chat.mark', { at: Math.max(lastTs, mark.at) });
   if (first) {
     ui.summary = [...touched.values()].map(i => ({ k: i.k, L: levelOf(i.k), xp: xpOf(i.k), exact: i.exact }));
@@ -266,10 +306,10 @@ function start(h) {
     const m = e.data;
     if (m.type === 'lines') {
       ui.err = ''; ui.name = m.name; ui.lastLine = Date.now();
-      if (m.first) { lastRem = {}; pend = null; ui.state = 'on'; }
+      if (m.first) { lastRem = {}; pend = []; gots = []; used = []; ui.state = 'on'; }
       feed(m.lines, m.first, m.mod);
       if (m.first) refreshSession();
-    } else if (m.type === 'reset') { lastRem = {}; pend = null; }
+    } else if (m.type === 'reset') { lastRem = {}; pend = []; gots = []; used = []; }
     else if (m.type === 'error') {
       ui.err = m.name === 'NotFoundError' ? 'fichier introuvable (jeu fermé ?)' : m.name === 'NotAllowedError' ? 'accès refusé' : m.msg;
       if (m.name === 'NotAllowedError') ui.state = 'paused';
@@ -299,6 +339,9 @@ async function resume() {
   try { if (await h.requestPermission({ mode: 'read' }) === 'granted') { start(h); refreshSession(); } } catch { /* ignore */ }
 }
 async function unlink() { stop(); await dropHandle(); ui.summary = null; refreshSession(); }
+
+// au chargement : icônes / prix des produits fabriqués de la session en cours
+setTimeout(() => Object.keys((sess().real || {}).crafted || {}).forEach(learnCrafted), 0);
 
 // au chargement : reprise automatique si le navigateur a gardé l'autorisation
 (async () => {
@@ -368,6 +411,6 @@ function chatCfgChange(el) {
   if (k === 'sound' && el.checked) { initAudio(); beep(); }
 }
 // fin de session : la dernière XP non classée compte comme une récolte
-const endSession = () => flushPend('h');
+const endSession = () => resolve('h');
 
-export { parseLine, feed, start as chatStart, chatPanelHtml, chatClick, chatCfgChange, endSession, ITEMS, ui as chatUi };
+export { parseLine, feed, start as chatStart, chatPanelHtml, chatClick, chatCfgChange, endSession, ITEMS, CRAFTED, ui as chatUi };

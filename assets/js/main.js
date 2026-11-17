@@ -1,13 +1,13 @@
 // Waktool — module main
-import { st } from './state.js?v=895eb43b';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=895eb43b';
-import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=895eb43b';
-import { renderSide } from './side.js?v=895eb43b';
-import { only, xponly, renderJobCard, renderMetiers } from './metiers.js?v=895eb43b';
-import { renderProfit } from './profit.js?v=895eb43b';
-import { renderZones } from './zones.js?v=895eb43b';
-import { renderSession, sess } from './session.js?v=895eb43b';
-import { feed as chatFeed } from './chatlog.js?v=895eb43b';
+import { st } from './state.js?v=ce18e5b8';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=ce18e5b8';
+import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=ce18e5b8';
+import { renderSide } from './side.js?v=ce18e5b8';
+import { only, xponly, renderJobCard, renderMetiers } from './metiers.js?v=ce18e5b8';
+import { renderProfit } from './profit.js?v=ce18e5b8';
+import { renderZones } from './zones.js?v=ce18e5b8';
+import { renderSession, sess } from './session.js?v=ce18e5b8';
+import { feed as chatFeed } from './chatlog.js?v=ce18e5b8';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');

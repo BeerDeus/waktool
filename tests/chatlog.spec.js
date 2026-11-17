@@ -100,3 +100,25 @@ test('lecture du fichier en continu (worker) : lignes ajoutées après la liaiso
   expect((await sess(page)).real.xp).toBe(162);
   expect(errs).toEqual([]);
 });
+
+test('crafts : une XP par craft, classés à part (ni récolte ni plantation), ingrédients déduits', async ({ page }) => {
+  const errs = trackErrors(page);
+  await seed(page, { 'lvl.herboriste': '60', 'prices': { 2005: [10, Date.now()] } });
+  await page.goto('/?c#session');
+  await feed(page, [xp('00:08:00', 176, 1850)], true);
+  const craft = ['00:11:30', 450];
+  await feed(page, [
+    xp('00:08:24', 176, 1674), L('00:08:24', 'Vous avez ramassé 5x Fleur de Rhodon .'),
+    xp(craft[0], 450, 1224), xp(craft[0], 450, 774), xp(craft[0], 450, 324), xp(craft[0], 450, 9099, 1),
+    L(craft[0], 'Vous avez perdu 20x Pied de Boufton .'), L(craft[0], 'Vous avez perdu 20x Fleur de Rhodon .'),
+    L(craft[0], 'Vous avez ramassé 4x Fil Brut .'), L(craft[0], 'Vous avez réussi votre recette de Fil Brut.'),
+    L('00:11:41', 'Vous avez perdu 235x Algue Narine .'), L('00:11:41', 'Vous avez ramassé 47x Fil Fragile .'),
+    L('00:11:41', 'Vous avez réussi votre recette de Fil Fragile.'), // recette trop basse : aucune XP
+  ]);
+  const s = await sess(page);
+  expect(s.real).toMatchObject({ h: 1, p: 0, xp: 176 + 4 * 450, craftXp: 1800, crafted: { 'Fil Brut': 4, 'Fil Fragile': 47 }, used: { 'Fleur de Rhodon': 20, 'Algue Narine': 235 } });
+  expect(await ls(page, 'lvl.herboriste')).toBe('61');
+  await expect(page.locator('#s-live')).toContainText('dont 1 800 en craft');
+  await expect(page.locator('#s-items')).toContainText('fabriqué');
+  expect(errs).toEqual([]);
+});
