@@ -5,11 +5,12 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create, update: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['levels', 'prefs', 'progress', 'prices', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['levels', 'prefs', 'progress', 'prices', 'phist', 'updatedAt'])
         && (!('levels' in request.resource.data) || request.resource.data.levels is map)
         && (!('prefs' in request.resource.data) || request.resource.data.prefs is map)
         && (!('progress' in request.resource.data) || request.resource.data.progress is map)
-        && (!('prices' in request.resource.data) || request.resource.data.prices is map);
+        && (!('prices' in request.resource.data) || request.resource.data.prices is map)
+        && (!('phist' in request.resource.data) || request.resource.data.phist is map);
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
     match /{document=**} {

@@ -97,6 +97,7 @@ onAuthStateChanged(auth, async u => {
       prefs: { ...(local.prefs || {}), ...(remote.prefs || {}) },
       progress: { ...(local.progress || {}), ...(remote.progress || {}) },
       prices: { ...(remote.prices || {}) }, // fusion par date dans applyState (le plus récent gagne)
+      phist: { ...(remote.phist || {}) }, // historiques : union par date dans applyState
     };
     W.applyState(merged);
     const needPush = !snap.exists() ||

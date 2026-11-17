@@ -1,10 +1,10 @@
 // Waktool — module metiers
-import { st } from './state.js?v=aec81dce';
-import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=aec81dce';
-import { PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=aec81dce';
-import { renderSide } from './side.js?v=aec81dce';
-import { renderProfit } from './profit.js?v=aec81dce';
-import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=aec81dce';
+import { st } from './state.js?v=f815d900';
+import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=f815d900';
+import { expandShopping, farmInfo, PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=f815d900';
+import { renderSide } from './side.js?v=f815d900';
+import { renderProfit } from './profit.js?v=f815d900';
+import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=f815d900';
 // ================================================================ page Métiers
 const q = $('#q'), only = $('#only');
 only.checked = store.get('only') === '1';
@@ -253,6 +253,23 @@ function harvestPlanHtml(j) {
   </div>`;
 }
 
+// une ligne de liste de courses : quantité, prix, et temps pour la farmer soi-même
+function shopLine(o) {
+  const f = farmInfo(o.item, o.n), p = price(o.item.id);
+  const farm = !f ? '' : f.rare ? '<span class="farm na" title="Ressource rare (1 % des plantes)">rare</span>'
+    : f.locked ? `<span class="farm na" title="${esc(f.j.label)} niveau ${f.r.level} requis">🔒 ${esc(f.j.label)} ${f.r.level}</span>`
+      : `<span class="farm" title="Temps pour récolter ${fmt(o.n)} ${esc(o.item.name)} toi-même (${esc(f.r.name)}, bonus actifs, sans déplacements)">⏱ ${fmtDur(f.time)}${p ? ` · ${fmtK(p * o.n / (f.time / 3600))}/h` : ''}</span>`;
+  return `<li>${ingChip({ item: o.item }, o.n)} ${farm}</li>`;
+}
+function shopTotals(list) {
+  let cost = 0, miss = 0, farm = 0, nFarm = 0;
+  list.forEach(o => {
+    const p = price(o.item.id); if (p) cost += p * o.n; else miss++;
+    const f = farmInfo(o.item, o.n); if (f && f.time) { farm += f.time; nFarm++; }
+  });
+  return { cost, miss, farm, nFarm };
+}
+
 function craftPlanHtml(j) {
   const L = levelOf(j.key);
   if (!needRecipes(j.key)) return '<p class="empty">Chargement des recettes…</p>';
@@ -260,26 +277,39 @@ function craftPlanHtml(j) {
   const tg = targetOf(j, L);
   if (tg <= L) return '<p class="empty">Choisis un objectif supérieur à ton niveau.</p>';
   const metric = store.get('metric.' + j.key) || 'crafts', withUp = store.get('withup.' + j.key) === '1';
+  const deep = store.get('deep.' + j.key) === '1';
   const pl = craftPlan(j, L, Math.min(xpOf(j.key), XP.need(L) - 1), tg, metric, withUp);
-  const ings = [...pl.ing.values()].sort((a, b) => b.n - a.n);
-  let c = 0, miss = 0;
-  ings.forEach(o => { const p = price(o.item.id); if (p) c += p * o.n; else miss++; });
+  let ings = [...pl.ing.values()], sub = null;
+  if (deep) {
+    const ex = expandShopping(pl.ing);
+    ex.pending.forEach(k => needRecipes(k)); // charge les métiers producteurs, re-rendu à l'arrivée
+    ings = [...ex.raw.values()];
+    sub = ex.crafts;
+  }
+  ings.sort((a, b) => b.n - a.n);
+  const t = shopTotals(ings);
   return `<div class="panel">
     <div class="panel-head">
       <h3>Niv. ${L} → ${tg}</h3>
       ${segHtml('metric', metric, [['crafts', 'Moins de crafts'], ['ing', 'Moins d’ingrédients'], ['kamas', 'Moins cher', 'Recettes dont tous les ingrédients ont un prix HDV']])}
     </div>
-    <label class="bchk"><input type="checkbox" data-withup ${withUp ? 'checked' : ''}> Inclure les améliorations de rareté</label>
+    <div class="tb-row">
+      <label class="bchk"><input type="checkbox" data-withup ${withUp ? 'checked' : ''}> Inclure les améliorations de rareté</label>
+      <label class="bchk"><input type="checkbox" data-deep ${deep ? 'checked' : ''}> Détailler jusqu’aux ressources brutes</label>
+    </div>
     <div class="kpis">
       <div class="kpi"><span>XP à gagner</span><b>${fmt(pl.xp)}</b></div>
-      <div class="kpi"><span>Crafts</span><b>${isFinite(pl.n) ? fmt(pl.n) : '—'}</b>${isFinite(pl.n) ? '' : '<small>aucune recette disponible</small>'}</div>
-      ${c ? `<div class="kpi"><span>Coût des ingrédients</span><b class="kph">${miss ? '≥ ' : ''}${fmtK(c)}</b>${miss ? `<small>${miss} sans prix</small>` : ''}</div>` : ''}
+      <div class="kpi"><span>Crafts</span><b>${isFinite(pl.n) ? fmt(pl.n) : '—'}</b><small>${isFinite(pl.n) ? (sub ? `+ ${fmt([...sub.values()].reduce((a, c) => a + Math.ceil(c.n), 0))} intermédiaires` : '') : 'aucune recette disponible'}</small></div>
+      ${t.cost ? `<div class="kpi"><span>Tout acheter</span><b class="kph">${t.miss ? '≥ ' : ''}${fmtK(t.cost)}</b><small>${t.miss ? `${t.miss} objet(s) sans prix` : 'prix HDV'}</small></div>` : ''}
+      ${t.nFarm ? `<div class="kpi"><span>Tout farmer soi-même</span><b>~${fmtDur(t.farm)}</b><small>${t.nFarm} ressource(s) récoltable(s)</small></div>` : ''}
     </div>
     <div class="cols">
-      <div><h4>À crafter</h4><ul class="plist">${craftListHtml(pl.crafts)}</ul></div>
-      <div><h4>Liste de courses <small>(${ings.length})</small></h4><ul class="plist shop">${ings.map(o => `<li>${ingChip({ item: o.item }, o.n)}</li>`).join('')}</ul></div>
+      <div><h4>À crafter</h4><ul class="plist">${craftListHtml(pl.crafts)}</ul>
+        ${sub && sub.size ? `<h4 style="margin-top:14px">Intermédiaires</h4><ul class="plist">${[...sub.values()].sort((a, b) => a.r.level - b.r.level).map(c => `<li>${icon(c.r.res.item)}<span><b>${fmt(Math.ceil(c.n))}×</b> ${esc(c.r.res.item.name)} <small>${esc((getJob(c.job) || {}).label || '')} niv. ${c.r.level}</small></span></li>`).join('')}</ul>` : ''}</div>
+      <div><h4>Liste de courses <small>(${ings.length}${deep ? ', ressources brutes' : ''})</small></h4><ul class="plist shop">${ings.map(shopLine).join('')}</ul></div>
     </div>
-    <p class="meta">XP des recettes = valeur de base du jeu (à confirmer en jeu). Pleine XP jusqu’à 10 niveaux sous le tien. Les ingrédients craftables ne sont pas détaillés.</p>
+    <p class="meta">⏱ = temps pour récolter la quantité toi-même (ton niveau, tes bonus, sans déplacements) ; « k/h » = ce que ce temps te rapporterait si tu vendais au prix HDV : plus c’est élevé, plus il vaut mieux farmer qu’acheter.
+      XP des recettes = valeur de base du jeu (à confirmer en jeu).</p>
   </div>`;
 }
 $('#list').addEventListener('click', e => {
@@ -288,6 +318,7 @@ $('#list').addEventListener('click', e => {
   if (m) { store.set('metric.' + st.cur, m.dataset.metric); renderContent(); }
 });
 $('#list').addEventListener('change', e => {
+  if (e.target.matches('[data-deep]')) { store.set('deep.' + st.cur, e.target.checked ? '1' : '0'); renderContent(); }
   if (e.target.matches('[data-withup]')) { store.set('withup.' + st.cur, e.target.checked ? '1' : '0'); renderContent(); }
 });
 

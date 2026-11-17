@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=aec81dce';
-import { D, icon, jget, norm, sj, store } from './util.js?v=aec81dce';
+import { st } from './state.js?v=f815d900';
+import { D, icon, jget, norm, sj, store } from './util.js?v=f815d900';
 
-import { job, renderPage } from './main.js?v=aec81dce';
+import { job, renderPage } from './main.js?v=f815d900';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -32,16 +32,42 @@ const XP = {
 // ================================================================ prix HDV (kamas / unité), par id d'objet
 const PRICES = () => jget('prices', {}) || {};
 const price = id => { const p = PRICES()[id]; return p ? p[0] : null; };
+// historique des prix : { id: [t1, p1, t2, p2, …] } (tableau à plat : Firestore n'accepte pas les tableaux imbriqués)
+const PHIST = () => jget('phist', {}) || {};
+const HIST_MAX = 30;
 function setPrices(map) {
-  const all = PRICES(), now = Date.now();
+  const all = PRICES(), hist = PHIST(), now = Date.now();
   for (const [id, v] of Object.entries(map)) {
-    if (v === null || v === '' || isNaN(+v) || +v <= 0) delete all[id]; else all[id] = [Math.round(+v), now];
+    if (v === null || v === '' || isNaN(+v) || +v <= 0) { delete all[id]; continue; }
+    const p = Math.round(+v);
+    all[id] = [p, now];
+    const h = hist[id] || [];
+    // nouvelle entrée si le prix change, sinon on rafraîchit la date de la dernière
+    if (h.length && h[h.length - 1] === p) h[h.length - 2] = now; else h.push(now, p);
+    hist[id] = h.slice(-HIST_MAX * 2);
   }
   store.set('prices', JSON.stringify(all));
+  store.set('phist', JSON.stringify(hist));
+}
+// ancienneté d'un prix en jours, et tendance par rapport au prix précédent (différent)
+const priceAge = id => { const p = PRICES()[id]; return p ? (Date.now() - p[1]) / 864e5 : null; };
+function priceTrend(id) {
+  const h = PHIST()[id];
+  if (!h || h.length < 4) return null;
+  const last = h[h.length - 1], prev = h[h.length - 3];
+  return prev ? { prev, pct: (last - prev) / prev * 100 } : null;
+}
+function priceHistoryText(id) {
+  const h = PHIST()[id] || [];
+  const out = [];
+  for (let i = h.length - 2; i >= 0 && out.length < 8; i -= 2) out.push(`${new Date(h[i]).toLocaleDateString('fr-FR')} : ${h[i + 1].toLocaleString('fr-FR')} ₭`);
+  return out.join('\n');
 }
 const priceInput = (it, cls = '') => {
-  const P = PRICES()[it.id];
-  return `<span class="pin-price ${cls}"><input type="number" min="0" inputmode="numeric" data-price="${it.id}" value="${P ? P[0] : ''}" placeholder="prix"><i>₭</i></span>`;
+  const P = PRICES()[it.id], age = priceAge(it.id), tr = priceTrend(it.id);
+  const stale = age === null ? '' : age > 30 ? 'old' : age > 7 ? 'stale' : '';
+  const title = P ? `Prix du ${new Date(P[1]).toLocaleDateString('fr-FR')}${stale ? ' (à mettre à jour)' : ''}${priceHistoryText(it.id) ? '\nHistorique :\n' + priceHistoryText(it.id) : ''}` : 'Prix unitaire HDV';
+  return `<span class="pin-price ${cls} ${stale}" title="${title.replace(/"/g, '&quot;')}"><input type="number" min="0" inputmode="numeric" data-price="${it.id}" value="${P ? P[0] : ''}" placeholder="prix"><i>₭</i>${tr && Math.abs(tr.pct) >= 1 ? `<b class="trend ${tr.pct > 0 ? 'up' : 'down'}">${tr.pct > 0 ? '↗' : '↘'}${Math.abs(Math.round(tr.pct))} %</b>` : ''}</span>`;
 };
 
 // ================================================================ métiers
@@ -325,7 +351,7 @@ function profitRows(j, opts) {
   return rows;
 }
 
-export { PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
+export { PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
 
 // ================================================================ zones (« Où aller ? »)
 // Les zones viennent du texte MethodWakfu (« Région - zone1, zone2 & zone3 »), hétérogène : on normalise.
@@ -375,3 +401,41 @@ function zonesIndex() {
   return ZONES;
 }
 export { zonesIndex };
+
+// ================================================================ liste de courses : acheter ou farmer, arbre de craft
+// temps pour récolter soi-même `qty` exemplaires d'un objet (selon ton niveau et tes bonus)
+function farmInfo(it, qty) {
+  if (!it || !it.src) return null;
+  const j = getJob(it.src.split(':')[0]);
+  if (!j || j.type !== 'harvest') return null;
+  const r = resOfItem(j, it.id), L = levelOf(j.key);
+  if (!r) return null;
+  if ((r.rare || []).some(x => x.id === it.id)) return { j, r, rare: true };
+  if (L === null || r.level > L) return { j, r, locked: true };
+  const d = dur(j.key, L - r.level, r), q = qtyStats(j).avg || 1;
+  return { j, r, time: qty / q * d };
+}
+// déplie les ingrédients fabriquables (recette de base la moins haute du métier producteur) jusqu'aux
+// ressources brutes. Renvoie { raw: Map(id -> {item, n}), crafts: Map(id -> {r, n, job}), pending: [métiers à charger] }
+function expandShopping(ingMap, maxDepth = 6) {
+  const raw = new Map(), crafts = new Map(), pending = new Set();
+  const recipeFor = it => {
+    for (const k of it.prod || []) {
+      if (!RD[k]) { pending.add(k); continue; }
+      const cands = RD[k].recipes.filter(r => !r.up && r.res.item.id === it.id);
+      if (cands.length) return { r: cands.sort((a, b) => a.level - b.level)[0], job: k };
+    }
+    return null;
+  };
+  const walk = (it, n, depth, path) => {
+    const rc = !it.src && depth < maxDepth && !path.has(it.id) ? recipeFor(it) : null;
+    if (!rc) { addTo(raw, it.id, n, { item: it }); return; }
+    const times = n / rc.r.res.qty;
+    addTo(crafts, rc.r.id, times, { r: rc.r, job: rc.job });
+    const p2 = new Set(path).add(it.id);
+    rc.r.ing.forEach(i => walk(i.item, times * i.qty, depth + 1, p2));
+  };
+  ingMap.forEach(o => walk(o.item, o.n, 0, new Set()));
+  return { raw, crafts, pending: [...pending] };
+}
+export { farmInfo, expandShopping };

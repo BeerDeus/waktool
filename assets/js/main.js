@@ -1,12 +1,12 @@
 // Waktool — module main
-import { st } from './state.js?v=aec81dce';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=aec81dce';
-import { ALL, CRAFTS, HARVEST, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=aec81dce';
-import { renderSide } from './side.js?v=aec81dce';
-import { only, renderJobCard, renderMetiers } from './metiers.js?v=aec81dce';
-import { renderProfit } from './profit.js?v=aec81dce';
-import { renderZones } from './zones.js?v=aec81dce';
-import { renderSession, sess } from './session.js?v=aec81dce';
+import { st } from './state.js?v=f815d900';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=f815d900';
+import { ALL, CRAFTS, HARVEST, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=f815d900';
+import { renderSide } from './side.js?v=f815d900';
+import { only, renderJobCard, renderMetiers } from './metiers.js?v=f815d900';
+import { renderProfit } from './profit.js?v=f815d900';
+import { renderZones } from './zones.js?v=f815d900';
+import { renderSession, sess } from './session.js?v=f815d900';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');
@@ -145,11 +145,22 @@ window.waktool = {
       if (j.type === 'harvest' && store.get('bonus.' + j.key)) o.bonus = bjob(j.key);
       if (Object.keys(o).length) progress[j.key] = o;
     });
-    return { levels, progress, prices: PRICES(),
+    return { levels, progress, prices: PRICES(), phist: jget('phist', {}) || {},
       prefs: { only: only.checked, bonuses: bg(), theme: curTheme(), pins: pins(), sessions: jget('sessions', []) || [] } };
   },
   applyState(s) {
-    if (s.prices && typeof s.prices === 'object') {
+    if (s.phist && typeof s.phist === 'object') {
+    // union des historiques par date
+    const mine = jget('phist', {}) || {};
+    for (const [id, h] of Object.entries(s.phist)) {
+      if (!Array.isArray(h)) continue;
+      const m = new Map();
+      [mine[id] || [], h].forEach(a => { for (let i = 0; i + 1 < a.length; i += 2) m.set(a[i], a[i + 1]); });
+      mine[id] = [...m.entries()].sort((x, y) => x[0] - y[0]).slice(-30).flat();
+    }
+    store.set('phist', JSON.stringify(mine));
+  }
+  if (s.prices && typeof s.prices === 'object') {
       const all = PRICES();
       for (const [id, v] of Object.entries(s.prices)) if (Array.isArray(v) && (!all[id] || v[1] > all[id][1])) all[id] = v;
       store.set('prices', JSON.stringify(all));
