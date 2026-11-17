@@ -42,3 +42,23 @@ test('index des zones normalisé', async ({ page }) => {
   expect(r.brakmar).toBe(0); // fusionné avec « Brâkmar »
   expect(r.kelba).toBe(true);
 });
+
+test('synchronisation compte : applyState complet sans erreur', async ({ page }) => {
+  const errs = [];
+  page.on('pageerror', e => errs.push(e.message));
+  const r = await page.evaluate(() => {
+    try {
+      window.waktool.applyState({
+        levels: { paysan: 30, herboriste: 17 },
+        progress: { paysan: { xp: 1200, target: 45, bonus: { pet: 'job', petLvl: 40, conso: true } } },
+        prices: { 4442: [12, Date.now()] },
+        phist: { 4442: [Date.now() - 864e5, 10, Date.now(), 12] },
+        prefs: { only: true, bonuses: { region: 30, wakfu: 20 }, theme: 'dark', pins: ['boulanger'], sessions: [{ t: 1, ms: 60000, job: 'paysan', res: 'Blé', xp: 100 }] },
+      });
+      const s = window.waktool.getState();
+      return { ok: true, lvl: s.levels.paysan, region: s.prefs.bonuses.region, pet: s.progress.paysan.bonus.pet, pins: s.prefs.pins, hist: s.phist[4442].length, sessions: s.prefs.sessions.length };
+    } catch (e) { return { ok: false, err: String(e) }; }
+  });
+  expect(r).toEqual({ ok: true, lvl: 30, region: 30, pet: 'job', pins: ['boulanger'], hist: 4, sessions: 1 });
+  expect(errs).toEqual([]);
+});

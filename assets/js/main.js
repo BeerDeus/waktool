@@ -1,12 +1,12 @@
 // Waktool — module main
-import { st } from './state.js?v=f815d900';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=f815d900';
-import { ALL, CRAFTS, HARVEST, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=f815d900';
-import { renderSide } from './side.js?v=f815d900';
-import { only, renderJobCard, renderMetiers } from './metiers.js?v=f815d900';
-import { renderProfit } from './profit.js?v=f815d900';
-import { renderZones } from './zones.js?v=f815d900';
-import { renderSession, sess } from './session.js?v=f815d900';
+import { st } from './state.js?v=70ddc189';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=70ddc189';
+import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=70ddc189';
+import { renderSide } from './side.js?v=70ddc189';
+import { only, renderJobCard, renderMetiers } from './metiers.js?v=70ddc189';
+import { renderProfit } from './profit.js?v=70ddc189';
+import { renderZones } from './zones.js?v=70ddc189';
+import { renderSession, sess } from './session.js?v=70ddc189';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');

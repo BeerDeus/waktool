@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=f815d900';
-import { D, icon, jget, norm, sj, store } from './util.js?v=f815d900';
+import { st } from './state.js?v=70ddc189';
+import { D, icon, jget, norm, sj, store } from './util.js?v=70ddc189';
 
-import { job, renderPage } from './main.js?v=f815d900';
+import { job, renderPage } from './main.js?v=70ddc189';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
