@@ -1,11 +1,11 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=7681952f';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=7681952f';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=7681952f';
-import { renderTabs } from './main.js?v=7681952f';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=7681952f';
-import { growEvent } from './grow.js?v=7681952f';
-import { flash, initAudio } from './alert.js?v=7681952f';
+import { st } from './state.js?v=a85039e7';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=a85039e7';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=a85039e7';
+import { renderTabs } from './main.js?v=a85039e7';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=a85039e7';
+import { growEvent } from './grow.js?v=a85039e7';
+import { flash, initAudio } from './alert.js?v=a85039e7';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, weather: 'ok', allSeeds: true, t: 0 };
@@ -173,10 +173,11 @@ function heroHtml(c, gd) {
   const xNow = XP.total(c.L) + c.x, xEnd = XP.total(c.to);
   let g = c.g;
   if (!(g.job === j.key && g.start && g.start.to === c.to && g.start.x <= xNow)) { setGoal({ job: j.key, start: { to: c.to, x: xNow } }); g = goal(); }
-  const startTot = g.start.x;
+  // barre : de ton niveau au moment où tu as fixé l'objectif (départ) jusqu'à l'objectif
+  const startTot = g.start.x, startL = Math.min(c.L, Math.floor(Math.sqrt(startTot / 75) + 1e-9)), p = pct(xNow - startTot, xEnd - startTot);
   const prog = `<div class="hero-prog">
-    <div class="hero-prog-l"><b>${c.L}</b><small>${fmt(c.x)} / ${fmt(XP.need(c.L))} XP</small></div>
-    ${bar(pct(xNow - startTot, xEnd - startTot), 'big')}
+    <div class="hero-prog-l"><b>${startL}</b><small>départ</small></div>
+    <div class="hero-prog-m">${bar(p, 'big')}<small>Niv. <b>${c.L}</b> · ${fmt(c.x)} / ${fmt(XP.need(c.L))} XP · ${Math.floor(p)} %${startL < c.L ? ' <button type="button" class="lnk" data-g="restart" title="Repartir de ton niveau actuel">↺</button>' : ''}</small></div>
     <div class="hero-prog-r"><b>${c.to}</b><small>${c.L >= c.to ? 'atteint' : `${fmt(Math.max(0, xEnd - xNow))} XP restants`}</small></div>
   </div>`;
   if (gd.kind === 'done') return `<section class="hero done">${head}${prog}<div class="next big-done"><div class="next-txt"><b>Objectif atteint 🎉</b><span>Fixe un nouveau niveau à atteindre.</span></div></div></section>`;
@@ -292,6 +293,11 @@ page.addEventListener('click', async e => {
     e.preventDefault();
     const d = $('#page-objectif details.more'); if (d) d.open = true;
     $('#journal').scrollIntoView({ behavior: 'smooth' });
+  }
+  if (e.target.closest('[data-g="restart"]')) {
+    const c = ctx();
+    if (c.L !== null) { setGoal({ job: c.j.key, start: { to: c.to, x: XP.total(c.L) + c.x } }); renderObjectif(); }
+    return;
   }
   const v = e.target.closest('[data-view]');
   if (v) { setGoal({ view: v.dataset.view }); renderObjectif(); }

@@ -474,6 +474,10 @@ details.more[open] > summary { margin-bottom: 8px; }
 .hero-prog b { font-size: 22px; line-height: 1; }
 .hero-prog small { display: block; color: var(--mut); font-size: 11.5px; white-space: nowrap; }
 .hero-prog-r { text-align: right; }
+.hero-prog-m { display: grid; gap: 5px; min-width: 0; }
+.hero-prog-m small { text-align: center; }
+.hero-prog-m small b { font-size: inherit; color: var(--txt); }
+.hero-prog-m .lnk { text-decoration: none; font-size: 13px; margin-left: 4px; }
 .gbar2 { height: 8px; border-radius: 99px; background: var(--card2); overflow: hidden; border: 1px solid var(--line); }
 .gbar2 i { display: block; height: 100%; background: var(--c); border-radius: 99px; transition: width .4s ease; }
 .gbar2.big { height: 14px; }

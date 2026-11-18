@@ -110,3 +110,16 @@ test('objectif : zones communes avec l’étape suivante (Croton puis Fil Solide
   await expect(page.locator('.steps li').first()).toContainText('+ Edelweiss ensuite');
   expect(errs).toEqual([]);
 });
+
+test('objectif : barre de progression depuis le départ, ↺ repart du niveau actuel', async ({ page }) => {
+  const errs = trackErrors(page);
+  await seed(page, { 'lvl.herboriste': '65', 'xp.herboriste': '2729', 'target.herboriste': '70',
+    goal: { job: 'herboriste', start: { to: 70, x: 75 * 45 * 45 } } });
+  await page.goto('/?pb#objectif');
+  await expect(page.locator('.hero-prog-l b')).toHaveText('45');
+  await expect(page.locator('.hero-prog-m')).toContainText('Niv. 65 · 2 729 / 9 825 XP · 77 %');
+  await page.click('[data-g="restart"]');
+  await expect(page.locator('.hero-prog-l b')).toHaveText('65');
+  await expect(page.locator('.hero-prog-m')).toContainText('· 5 %'); // 2 729 / 50 625
+  expect(errs).toEqual([]);
+});
