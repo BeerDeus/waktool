@@ -1,10 +1,10 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=52ac1955';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=52ac1955';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, xpOf } from './model.js?v=52ac1955';
-import { renderTabs } from './main.js?v=52ac1955';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=52ac1955';
-import { flash, initAudio } from './alert.js?v=52ac1955';
+import { st } from './state.js?v=ae254648';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=ae254648';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, xpOf } from './model.js?v=ae254648';
+import { renderTabs } from './main.js?v=ae254648';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=ae254648';
+import { flash, initAudio } from './alert.js?v=ae254648';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', t: 0 };
@@ -48,7 +48,12 @@ function guide(c) {
   if (c.loading) return { kind: 'loading' };
   const s = c.plan && c.plan.steps[0];
   if (!s) return { kind: 'blocked' };
-  if (s.kind === 'g') return { kind: 'g', s, key: s.key };
+  if (s.kind === 'g') {
+    // étape suivante = craft qui utilise cette ressource : à garder en sac
+    const nx = c.plan.steps[1], it = mainItem(s.r);
+    const use = nx && nx.kind === 'c' && nx.ing.find(o => o.item.name === it.name);
+    return { kind: 'g', s, key: s.key, keep: use ? { n: use.qty * Math.ceil(nx.crafts - 1e-6), prod: nx.rec.res.item.name, crafts: Math.ceil(nx.crafts - 1e-6), at: nx.from } : null };
+  }
   const S = stock(), N = Math.max(1, Math.ceil(s.crafts - 1e-6));
   const ing = s.ing.map(o => {
     const need = o.qty * N, have = S[o.item.name] || 0;
@@ -123,7 +128,9 @@ const bar = (p, cls = '') => `<div class="gbar2 ${cls}"><i style="width:${p.toFi
 function actionText(gd) {
   if (gd.kind === 'g') {
     const it = mainItem(gd.s.r);
-    return { title: `Récolte ${it.name}`, sub: `${gd.s.plants ? 'Récolte, replante les graines, recommence' : 'Récolte en boucle'} jusqu’au niveau ${gd.s.to}` };
+    const k = gd.keep;
+    return { title: `Récolte ${it.name}`, sub: `${gd.s.plants ? 'Récolte, replante les graines, recommence' : 'Récolte en boucle'} jusqu’au niveau ${gd.s.to}`
+      + (k ? `. Garde-les : au niveau ${k.at}, ${fmt(k.crafts)} ${k.prod} en utiliseront ${fmt(k.n)}.` : '') };
   }
   if (gd.kind === 'c') {
     const prod = gd.s.rec.res.item.name;
