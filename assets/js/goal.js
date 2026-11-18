@@ -1,11 +1,11 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=a85039e7';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=a85039e7';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=a85039e7';
-import { renderTabs } from './main.js?v=a85039e7';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=a85039e7';
-import { growEvent } from './grow.js?v=a85039e7';
-import { flash, initAudio } from './alert.js?v=a85039e7';
+import { st } from './state.js?v=66a69829';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=66a69829';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=66a69829';
+import { renderTabs } from './main.js?v=66a69829';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=66a69829';
+import { growEvent } from './grow.js?v=66a69829';
+import { flash, initAudio } from './alert.js?v=66a69829';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, weather: 'ok', allSeeds: true, t: 0 };
@@ -172,7 +172,7 @@ function heroHtml(c, gd) {
   if (gd.kind === 'nolvl') return `<section class="hero">${head}<p class="hero-msg">Indique ton niveau actuel en ${esc(j.label)} pour calculer le plan${chatUi.state === 'on' ? ' (ou attends ta prochaine montée de niveau : le journal le déduira)' : ''}.</p></section>`;
   const xNow = XP.total(c.L) + c.x, xEnd = XP.total(c.to);
   let g = c.g;
-  if (!(g.job === j.key && g.start && g.start.to === c.to && g.start.x <= xNow)) { setGoal({ job: j.key, start: { to: c.to, x: xNow } }); g = goal(); }
+  if (!(g.job === j.key && g.start && g.start.to === c.to && g.start.x <= xNow)) { setGoal({ job: j.key, start: { to: c.to, x: XP.total(c.L) } }); g = goal(); } // départ = début du niveau actuel
   // barre : de ton niveau au moment où tu as fixé l'objectif (départ) jusqu'à l'objectif
   const startTot = g.start.x, startL = Math.min(c.L, Math.floor(Math.sqrt(startTot / 75) + 1e-9)), p = pct(xNow - startTot, xEnd - startTot);
   const prog = `<div class="hero-prog">
@@ -296,7 +296,7 @@ page.addEventListener('click', async e => {
   }
   if (e.target.closest('[data-g="restart"]')) {
     const c = ctx();
-    if (c.L !== null) { setGoal({ job: c.j.key, start: { to: c.to, x: XP.total(c.L) + c.x } }); renderObjectif(); }
+    if (c.L !== null) { setGoal({ job: c.j.key, start: { to: c.to, x: XP.total(c.L) } }); renderObjectif(); }
     return;
   }
   const v = e.target.closest('[data-view]');
@@ -331,7 +331,7 @@ page.addEventListener('change', e => {
   else if (k === 'to') {
     store.set('target.' + j.key, String(Math.max(1, Math.min(250, +el.value || 0))));
     const L = levelOf(j.key);
-    if (L !== null) setGoal({ job: j.key, start: { to: +el.value, x: XP.total(L) + xpOf(j.key) } });
+    if (L !== null) setGoal({ job: j.key, start: { to: +el.value, x: XP.total(L) } });
   }
   if (k === 'job' || k === 'to' || k === 'lvl') prevSig = null;
   changed(); renderObjectif();
