@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=ae254648';
-import { D, icon, jget, norm, sj, store } from './util.js?v=ae254648';
+import { st } from './state.js?v=502a2738';
+import { D, icon, jget, norm, sj, store } from './util.js?v=502a2738';
 
-import { job, renderPage } from './main.js?v=ae254648';
+import { job, renderPage } from './main.js?v=502a2738';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -291,20 +291,44 @@ function harvestPlan(j, from, xp0, to, strat) {
 }
 
 // ================================================================ assistant d'objectif
+// plantation dans la nature (réglages page Objectif) : plants sauvages trouvés en arrivant sur un spot, plants max
+// entretenus sur le spot, temps de pousse (s), graines récoltées sur chaque plant avant de le couper
+const FIELD_DEF = { wild: 40, cap: 100, grow: 300, allSeeds: true };
+// cycle d'un plant : planter (1/p tentatives, XP si ça prend) → pousse → récolter les graines → couper (objets).
+// La pousse ne freine que si l'on a trop peu de plants : chaque plant ne repasse qu'après `grow` secondes.
+function plantCycle(j, r, L, qAvg, fd = FIELD_DEF) {
+  const diff = Math.max(0, L - r.level), d = dur(j.key, diff, r), plants = 1 / plantChance();
+  const seedActs = fd.allSeeds ? Math.max(1, plants / qAvg) : plants / qAvg;
+  const a = (plants + 1 + seedActs) * d;
+  const time = Math.max(a, (fd.grow + a) / Math.max(1, fd.cap));
+  return { d, plants, seedActs, a, time, growBound: time > a + 1e-9, xp: XP.per(diff, bonusPlant()) + XP.per(diff, bonusXp()) * (1 + seedActs) };
+}
+// attente à l'arrivée sur un spot : on récolte les graines des plants sauvages, on replante, on coupe les sauvages,
+// puis on attend que les premiers plants plantés aient poussé (s'il reste du temps)
+function spotIdle(j, rs, L, qAvg, fd = FIELD_DEF) {
+  let busy = 0;
+  for (const r of rs) {
+    if (!PLANTABLE.includes(j.key) || !(r.seed || []).length) return 0;
+    const d = dur(j.key, Math.max(0, L - r.level), r);
+    const n = Math.min(fd.wild * qAvg, Math.max(0, fd.cap - fd.wild) / plantChance()); // tentatives de plantation
+    busy += (n + fd.wild) * d;
+  }
+  return Math.max(0, fd.grow - busy);
+}
 // coût d'un objet d'une ressource au niveau L : XP gagnée et temps passé pour le ramasser.
-// plant = on replante les graines dans la nature (planter → couper → récolter des graines), sinon récolte seule.
-function gatherUnit(j, r, L, qAvg, plant) {
+// plant = on replante les graines dans la nature (voir plantCycle), sinon récolte seule.
+function gatherUnit(j, r, L, qAvg, plant, fd = FIELD_DEF) {
   const diff = Math.max(0, L - r.level);
   if (plant && PLANTABLE.includes(j.key) && (r.seed || []).length) {
-    const f = fieldCycle(j, r, L, qAvg);
-    return { xp: f.xp / qAvg, t: f.time / qAvg, plants: f.plants / qAvg, cuts: 1 / qAvg, seedActs: f.seedActs / qAvg };
+    const f = plantCycle(j, r, L, qAvg, fd);
+    return { xp: f.xp / qAvg, t: f.time / qAvg, plants: f.plants / qAvg, cuts: 1 / qAvg, seedActs: f.seedActs / qAvg, growBound: f.growBound };
   }
   return { xp: XP.per(diff, bonusXp()) / qAvg, t: dur(j.key, diff, r) / qAvg, plants: 0, cuts: 1 / qAvg, seedActs: 0 };
 }
 const CRAFT_T = 2; // s par craft (atelier), approximatif
 // option « récolter les ingrédients d'une recette puis crafter » au niveau L pour gagner `need` XP, stock S déjà en sac.
 // Renvoie le nombre de crafts (continu) et le temps, ou null si la recette n'est pas faisable.
-function craftOption(j, rec, L, qAvg, plant, need, S) {
+function craftOption(j, rec, L, qAvg, plant, need, S, fd = FIELD_DEF) {
   if (rec.up || rec.level > L || !rec.ing.length) return null;
   const c = Math.floor(rec.xp * XP.mult(L - rec.level));
   if (!c) return null;
@@ -312,7 +336,7 @@ function craftOption(j, rec, L, qAvg, plant, need, S) {
   for (const i of rec.ing) {
     const rr = resOfItem(j, i.item.id);
     if (!rr || rr.level > L || (rr.rare || []).some(x => x.id === i.item.id)) return null;
-    ing.push({ item: i.item, qty: i.qty, rr, u: gatherUnit(j, rr, L, qAvg, plant), have: Math.max(0, S[i.item.name] || 0) });
+    ing.push({ item: i.item, qty: i.qty, rr, u: gatherUnit(j, rr, L, qAvg, plant, fd), have: Math.max(0, S[i.item.name] || 0) });
   }
   const xpOf = N => N * c + ing.reduce((a, g) => a + Math.max(0, g.qty * N - g.have) * g.u.xp, 0);
   let lo = 0, hi = need / c;
@@ -343,13 +367,17 @@ function spotGroups(rs) {
 const sharesSpot = (a, b) => a.some(x => b.some(y => [...y.zones].some(k => x.zones.has(k))));
 // trajets pour passer d'une option à l'autre : un par spot, sauf si on est déjà dans une zone du nouveau
 const hops = (prev, cur) => cur.length - (prev && sharesSpot(prev, cur) ? 1 : 0);
+// temps perdu en changeant d'option : trajets + attente de pousse sur chaque nouveau spot
+const switchCost = (prev, cur, travel) => travel * hops(prev, cur) + cur.reduce((a, g) => a + (g.idle || 0), 0);
 
 // plan vers un objectif de niveau. Changer de spot coûte un trajet (travel, en s) : on cherche le chemin le plus court
 // en temps total (récolte + crafts + trajets) par programmation dynamique sur les niveaux, ce qui évite de changer de
 // ressource pour un gain minime. Une étape « craft » = aller récolter chaque ingrédient (un trajet par ingrédient).
-// Le stock en sac sert d'abord (il est consommé au fil du plan).
-function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, travel = 180 } = {}) {
-  const data = craft ? RD[j.key] : null, q = qtyStats(j).avg || 1;
+// Le stock en sac sert d'abord (il est consommé au fil du plan). En plantation, chaque nouveau spot coûte aussi
+// l'attente de la première pousse (voir spotIdle).
+function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, travel = 180, field = FIELD_DEF } = {}) {
+  const data = craft ? RD[j.key] : null, q = qtyStats(j).avg || 1, fd = { ...FIELD_DEF, ...field };
+  const withIdle = (groups, L) => { if (plant) groups.forEach(g => { g.idle = spotIdle(j, g.rs, L, q, fd); }); return groups; };
   const needOf = L => Math.max(0, XP.need(L) - (L === from ? x0 : 0));
   // 1) coût de chaque option à chaque niveau (stock pris en compte au premier niveau seulement)
   const lv = [];
@@ -357,12 +385,12 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
     const need = needOf(L), opts = new Map();
     for (const r of j.resources) {
       if (r.level > L) continue;
-      const u = gatherUnit(j, r, L, q, plant);
-      if (u.xp) opts.set('g:' + r.name, { t: need / u.xp * u.t, groups: spotGroups([r]) });
+      const u = gatherUnit(j, r, L, q, plant, fd);
+      if (u.xp) opts.set('g:' + r.name, { t: need / u.xp * u.t, groups: withIdle(spotGroups([r]), L) });
     }
     if (data) for (const rec of data.recipes) {
-      const o = craftOption(j, rec, L, q, plant, need, L === from ? stock : {});
-      if (o) opts.set(o.key, { t: o.t, groups: spotGroups(o.ing.filter(g => g.qty * o.N > g.have).map(g => g.rr)) });
+      const o = craftOption(j, rec, L, q, plant, need, L === from ? stock : {}, fd);
+      if (o) opts.set(o.key, { t: o.t, groups: withIdle(spotGroups(o.ing.filter(g => g.qty * o.N > g.have).map(g => g.rr)), L) });
     }
     lv.push(opts);
   }
@@ -374,9 +402,9 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
     const cur = new Map();
     for (const [k, o] of opts) {
       let best = null;
-      if (!prev) best = { c: o.t + travel * o.groups.length, p: null };
+      if (!prev) best = { c: o.t + switchCost(null, o.groups, travel), p: null };
       else for (const [pk, pv] of prev) {
-        const c = pv.c + o.t + (pk === k ? 0 : travel * hops(prevOpts.get(pk).groups, o.groups));
+        const c = pv.c + o.t + (pk === k ? 0 : switchCost(prevOpts.get(pk).groups, o.groups, travel));
         if (!best || c < best.c) best = { c, p: pk };
       }
       cur.set(k, best);
@@ -391,16 +419,16 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
   for (let i = back.length - 1; i >= 0 && k !== null; i--) { path[i] = k; k = back[i].get(k).p; }
   // 3) on rejoue le chemin avec le stock pour obtenir les quantités
   const S = { ...stock }, steps = [];
-  let time = 0, xpTotal = 0, blocked = null, travels = 0;
+  let time = 0, xpTotal = 0, blocked = null, travels = 0, idle = 0;
   for (let i = 0; i < lv.length; i++) {
     const L = from + i, need = needOf(L), key = path[i];
     xpTotal += need;
     if (!key) { blocked = L; break; }
     let best;
     if (key[0] === 'g') {
-      const r = j.resources.find(x => 'g:' + x.name === key), u = gatherUnit(j, r, L, q, plant);
+      const r = j.resources.find(x => 'g:' + x.name === key), u = gatherUnit(j, r, L, q, plant, fd);
       best = { kind: 'g', key, r, u, n: need / u.xp, t: need / u.xp * u.t };
-    } else best = craftOption(j, data.recipes.find(x => 'c:' + x.id === key), L, q, plant, need, S);
+    } else best = craftOption(j, data.recipes.find(x => 'c:' + x.id === key), L, q, plant, need, S, fd);
     time += best.t;
     let st = steps[steps.length - 1];
     if (!st || st.key !== best.key) {
@@ -423,11 +451,12 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
   // trajets : un par spot de chaque étape, sauf si l'étape précédente était déjà dans une de ses zones
   let pg = null;
   steps.forEach(st => {
-    st.groups = spotGroups(st.kind === 'g' ? [st.r] : st.ing.filter(o => o.gather >= 0.5).map(o => o.rr));
+    st.groups = withIdle(spotGroups(st.kind === 'g' ? [st.r] : st.ing.filter(o => o.gather >= 0.5).map(o => o.rr)), st.from);
     st.spots = st.groups.length; st.hops = hops(pg, st.groups); travels += st.hops;
+    st.idle = st.groups.reduce((a, g) => a + (g.idle || 0), 0); idle += st.idle;
     if (st.groups.length) pg = st.groups;
   });
-  return { steps, time: time + travels * travel, farm: time, travels, travel, xp: xpTotal, blocked };
+  return { steps, time: time + travels * travel + idle, farm: time, travels, travel, idle, xp: xpTotal, blocked };
 }
 
 // métier d'artisanat : recette la plus intéressante à chaque niveau
@@ -491,7 +520,7 @@ function profitRows(j, opts) {
   return rows;
 }
 
-export { resZones, spotGroups, gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
+export { FIELD_DEF, plantCycle, spotIdle, resZones, spotGroups, gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
 
 // ================================================================ zones (« Où aller ? »)
 // Les zones viennent du texte MethodWakfu (« Région - zone1, zone2 & zone3 »), hétérogène : on normalise.

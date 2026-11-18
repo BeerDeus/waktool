@@ -1,6 +1,6 @@
 // Service worker Waktool : code/données en « réseau d'abord » (toujours à jour, cache si hors ligne),
 // images et moteur OCR en « cache d'abord ». Les services Google/Firebase ne sont jamais mis en cache.
-const VERSION = 'v20';
+const VERSION = 'v21';
 const CORE = `waktool-core-${VERSION}`;
 const STATIC = `waktool-static-${VERSION}`;
 const PRECACHE = ['./', 'index.html', 'manifest.webmanifest', 'img/app/icon-192.png', 'img/app/icon-512.png'];

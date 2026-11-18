@@ -1,5 +1,5 @@
 // Waktool — alertes visibles à l'écran (pas de notifications système) : gros bandeau + bord qui pulse + son
-import { $, esc, sj } from './util.js?v=ae254648';
+import { $, esc, sj } from './util.js?v=502a2738';
 
 const soundOn = () => sj.get('chat', { sound: true }).sound;
 let actx = null;

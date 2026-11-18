@@ -113,3 +113,25 @@ test('objectif : ressources dans la même zone = un seul spot (Croton + Edelweis
   expect(r.steps).toEqual(['Croton', 'Fil Solide']);
   expect(r.travels).toBe(1);
 });
+
+test('objectif : pousse des plants (attente à l’arrivée, plafond de plants) et graines sur chaque plant', async ({ page }) => {
+  const m = await mod(page, 'model');
+  const r = await m.evaluate(async M => {
+    await M.loadRecipes('herboriste');
+    const j = M.getJob('herboriste'), R = j.resources.find(x => x.name === 'Croton'), q = M.qtyStats(j).avg;
+    const base = M.goalPlan(j, 64, 0, 70, {}, { travel: 180 });
+    const few = M.goalPlan(j, 64, 0, 70, {}, { travel: 180, field: { wild: 10, cap: 30 } });
+    return {
+      idleDefault: M.spotIdle(j, [R], 64, q), idleFew: M.spotIdle(j, [R], 64, q, { ...M.FIELD_DEF, wild: 10, cap: 30 }),
+      bound: M.plantCycle(j, R, 64, q, { ...M.FIELD_DEF, cap: 5 }).growBound, free: M.plantCycle(j, R, 64, q).growBound,
+      seeds: M.plantCycle(j, R, 64, q).seedActs, slower: few.time > base.time, idlePlan: few.idle > 0,
+    };
+  });
+  expect(r.idleDefault).toBe(0); // 40 sauvages + ~86 plantations : les premiers plants ont poussé avant la fin
+  expect(r.idleFew).toBeGreaterThan(0);
+  expect(r.bound).toBe(true); // 5 plants seulement : on attend la pousse
+  expect(r.free).toBe(false);
+  expect(r.seeds).toBe(1);
+  expect(r.slower).toBe(true);
+  expect(r.idlePlan).toBe(true);
+});

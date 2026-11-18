@@ -1,10 +1,10 @@
 // Waktool — module metiers
-import { st } from './state.js?v=ae254648';
-import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=ae254648';
-import { expandShopping, farmInfo, PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=ae254648';
-import { renderSide } from './side.js?v=ae254648';
-import { renderProfit } from './profit.js?v=ae254648';
-import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=ae254648';
+import { st } from './state.js?v=502a2738';
+import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=502a2738';
+import { expandShopping, farmInfo, PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=502a2738';
+import { renderSide } from './side.js?v=502a2738';
+import { renderProfit } from './profit.js?v=502a2738';
+import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=502a2738';
 // ================================================================ page Métiers
 const q = $('#q'), only = $('#only'), xponly = $('#xponly');
 only.checked = store.get('only') === '1';

@@ -1,13 +1,13 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=ae254648';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=ae254648';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, xpOf } from './model.js?v=ae254648';
-import { renderTabs } from './main.js?v=ae254648';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=ae254648';
-import { flash, initAudio } from './alert.js?v=ae254648';
+import { st } from './state.js?v=502a2738';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=502a2738';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, xpOf } from './model.js?v=502a2738';
+import { renderTabs } from './main.js?v=502a2738';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=502a2738';
+import { flash, initAudio } from './alert.js?v=502a2738';
 
 // ================================================================ état : objectif + sac
-const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', t: 0 };
+const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, allSeeds: true, t: 0 };
 const goal = () => sj.get('goal', GOAL_DEF);
 const setGoal = o => sj.set('goal', { ...goal(), ...o, t: Date.now() });
 // sac : { t, items: { nom: quantité } } — mis à jour par le journal du chat, corrigé à la main (ventes, coffre…)
@@ -38,7 +38,8 @@ function ctx() {
   const plant = g.plant && PLANTABLE.includes(j.key);
   const craft = g.craft && (RD[j.key] || needRecipes(j.key));
   let plan = null;
-  if (L !== null && to > L && (!g.craft || craft)) plan = goalPlan(j, L, x, to, stock(), { plant, craft: !!g.craft, travel: Math.max(0, +g.travel || 0) * 60 });
+  if (L !== null && to > L && (!g.craft || craft)) plan = goalPlan(j, L, x, to, stock(), { plant, craft: !!g.craft, travel: Math.max(0, +g.travel || 0) * 60,
+    field: { wild: Math.max(0, +g.wild || 0), cap: Math.max(1, +g.cap || 1), grow: Math.max(0, +g.grow || 0) * 60, allSeeds: g.allSeeds !== false } });
   return { g, j, L, x, to, plant, plan, loading: g.craft && !craft };
 }
 
@@ -129,7 +130,7 @@ function actionText(gd) {
   if (gd.kind === 'g') {
     const it = mainItem(gd.s.r);
     const k = gd.keep;
-    return { title: `Récolte ${it.name}`, sub: `${gd.s.plants ? 'Récolte, replante les graines, recommence' : 'Récolte en boucle'} jusqu’au niveau ${gd.s.to}`
+    return { title: `Récolte ${it.name}`, sub: `${gd.s.plants ? 'Graines, coupe, replante' : 'Récolte en boucle'} jusqu’au niveau ${gd.s.to}`
       + (k ? `. Garde-les : au niveau ${k.at}, ${fmt(k.crafts)} ${k.prod} en utiliseront ${fmt(k.n)}.` : '') };
   }
   if (gd.kind === 'c') {
@@ -180,10 +181,14 @@ function heroHtml(c, gd) {
     <div class="next">${visual}<div class="next-txt"><small>Prochaine action</small><b>${esc(a.title)}</b><span>${esc(a.sub)}</span>${whereHtml(gd)}</div></div>
     ${ingRows}
     <div class="hero-foot">
-      <span title="Récolte, plantation et crafts avec tes bonus + trajets entre spots (temps de pousse non compté)">⏱ ~${fmtDur(left)}${c.plan.travels ? ` · ${c.plan.travels} spot${c.plan.travels > 1 ? 's' : ''}` : ''}</span>
+      <span title="Récolte, plantation et crafts avec tes bonus + trajets entre spots + attente de la première pousse sur chaque spot">⏱ ~${fmtDur(left)}${c.plan.travels ? ` · ${c.plan.travels} spot${c.plan.travels > 1 ? 's' : ''}` : ''}${c.plan.idle >= 30 ? ` · dont ~${fmtDur(c.plan.idle)} d’attente de pousse` : ''}</span>
       ${r ? `<span title="XP gagnée ces 10 dernières minutes">⚡ ${fmt(r)} XP/h · fin dans ~${fmtDur(eta)}</span>` : ''}
       <details class="opts"><summary>Réglages</summary>
-        ${PLANTABLE.includes(j.key) ? `<label class="chk"><input type="checkbox" data-g="plant" ${c.g.plant ? 'checked' : ''}> Replanter les graines (XP de plantation)</label>` : ''}
+        ${PLANTABLE.includes(j.key) ? `<label class="chk"><input type="checkbox" data-g="plant" ${c.g.plant ? 'checked' : ''}> Replanter les graines (XP de plantation)</label>
+        ${c.g.plant ? `<label class="chk"><input type="checkbox" data-g="allSeeds" ${c.g.allSeeds !== false ? 'checked' : ''}> Graines récoltées sur chaque plant</label>
+        <label class="chk" title="Plants trouvés en arrivant sur un nouveau spot">Plants sauvages à l’arrivée <input type="number" min="0" max="300" data-g="wild" value="${+c.g.wild}"></label>
+        <label class="chk" title="Nombre de plants que tu entretiens sur un spot">Plants max sur un spot <input type="number" min="1" max="500" data-g="cap" value="${+c.g.cap}"></label>
+        <label class="chk" title="Temps entre la plantation et le stade où l’on peut récolter les graines">Temps de pousse <input type="number" min="0" max="60" step="0.5" data-g="grow" value="${+c.g.grow}"> min</label>` : ''}` : ''}
         <label class="chk"><input type="checkbox" data-g="craft" ${c.g.craft ? 'checked' : ''}> Crafter quand ça accélère (fils…)</label>
         <label class="chk" title="Temps moyen pour aller d’un spot de récolte à un autre : plus il est long, moins le plan te fait changer de cible">Trajet entre 2 spots <input type="number" min="0" max="60" data-g="travel" value="${+c.g.travel || 0}"> min</label>
         <label class="chk">XP actuelle <input type="number" min="0" data-g="xp" value="${c.x}"></label>
@@ -287,6 +292,8 @@ page.addEventListener('change', e => {
   if (k === 'job') setGoal({ job: el.value });
   else if (k === 'plant' || k === 'craft') setGoal({ [k]: el.checked });
   else if (k === 'travel') setGoal({ travel: Math.max(0, Math.min(60, +el.value || 0)) });
+  else if (k === 'allSeeds') setGoal({ allSeeds: el.checked });
+  else if (k === 'wild' || k === 'cap' || k === 'grow') setGoal({ [k]: Math.max(0, +el.value || 0) });
   else if (k === 'alert') { setGoal({ alert: el.value }); return; }
   else if (k === 'lvl') {
     const v = el.value === '' ? null : Math.max(0, Math.min(250, +el.value));
