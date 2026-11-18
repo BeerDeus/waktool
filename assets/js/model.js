@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=cbdf641d';
-import { D, icon, jget, norm, sj, store } from './util.js?v=cbdf641d';
+import { st } from './state.js?v=52ac1955';
+import { D, icon, jget, norm, sj, store } from './util.js?v=52ac1955';
 
-import { job, renderPage } from './main.js?v=cbdf641d';
+import { job, renderPage } from './main.js?v=52ac1955';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -320,6 +320,30 @@ function craftOption(j, rec, L, qAvg, plant, need, S) {
   const N = hi, t = ing.reduce((a, g) => a + Math.max(0, g.qty * N - g.have) * g.u.t, 0) + N * CRAFT_T;
   return { kind: 'c', key: 'c:' + rec.id, rec, N, t, c, ing };
 }
+// zones d'une ressource (index des zones) et groupes de ressources récoltables au même endroit
+let RZ = null;
+function resZones(r) {
+  if (!RZ) {
+    RZ = new Map();
+    zonesIndex().forEach(z => z.entries.forEach(e => { if (!RZ.has(e.r)) RZ.set(e.r, []); RZ.get(e.r).push(z); }));
+  }
+  return RZ.get(r) || [];
+}
+// ressources → spots : deux ressources qui ont une zone en commun se récoltent sans trajet entre elles
+// (chaque groupe garde les zones communes à toutes ses ressources)
+function spotGroups(rs) {
+  const groups = [];
+  for (const r of rs) {
+    const keys = new Set(resZones(r).map(z => z.key));
+    const g = keys.size && groups.find(g => g.zones.size && [...keys].some(k => g.zones.has(k)));
+    if (g) { g.zones = new Set([...g.zones].filter(k => keys.has(k))); g.rs.push(r); } else groups.push({ zones: keys, rs: [r] });
+  }
+  return groups;
+}
+const sharesSpot = (a, b) => a.some(x => b.some(y => [...y.zones].some(k => x.zones.has(k))));
+// trajets pour passer d'une option à l'autre : un par spot, sauf si on est déjà dans une zone du nouveau
+const hops = (prev, cur) => cur.length - (prev && sharesSpot(prev, cur) ? 1 : 0);
+
 // plan vers un objectif de niveau. Changer de spot coûte un trajet (travel, en s) : on cherche le chemin le plus court
 // en temps total (récolte + crafts + trajets) par programmation dynamique sur les niveaux, ce qui évite de changer de
 // ressource pour un gain minime. Une étape « craft » = aller récolter chaque ingrédient (un trajet par ingrédient).
@@ -334,29 +358,31 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
     for (const r of j.resources) {
       if (r.level > L) continue;
       const u = gatherUnit(j, r, L, q, plant);
-      if (u.xp) opts.set('g:' + r.name, { t: need / u.xp * u.t, sw: travel });
+      if (u.xp) opts.set('g:' + r.name, { t: need / u.xp * u.t, groups: spotGroups([r]) });
     }
     if (data) for (const rec of data.recipes) {
       const o = craftOption(j, rec, L, q, plant, need, L === from ? stock : {});
-      if (o) opts.set(o.key, { t: o.t, sw: travel * o.ing.filter(g => g.qty * o.N > g.have).length });
+      if (o) opts.set(o.key, { t: o.t, groups: spotGroups(o.ing.filter(g => g.qty * o.N > g.have).map(g => g.rr)) });
     }
     lv.push(opts);
   }
-  // 2) programmation dynamique : rester sur la même option ne coûte pas de trajet
-  let prev = null;
+  // 2) programmation dynamique : rester sur la même option ne coûte pas de trajet, changer coûte un trajet
+  //    par nouveau spot (aucun si la nouvelle ressource pousse dans une zone où l'on est déjà)
+  let prev = null, prevOpts = null;
   const back = [];
   for (const opts of lv) {
     const cur = new Map();
-    let bestPrev = null;
-    if (prev) for (const [k, v] of prev) if (!bestPrev || v.c < bestPrev.c) bestPrev = { k, c: v.c };
     for (const [k, o] of opts) {
-      let c = (bestPrev ? bestPrev.c : 0) + o.sw + o.t, p = bestPrev ? bestPrev.k : null;
-      const same = prev && prev.get(k);
-      if (same && same.c + o.t <= c) { c = same.c + o.t; p = k; }
-      cur.set(k, { c, p });
+      let best = null;
+      if (!prev) best = { c: o.t + travel * o.groups.length, p: null };
+      else for (const [pk, pv] of prev) {
+        const c = pv.c + o.t + (pk === k ? 0 : travel * hops(prevOpts.get(pk).groups, o.groups));
+        if (!best || c < best.c) best = { c, p: pk };
+      }
+      cur.set(k, best);
     }
     back.push(cur);
-    prev = cur;
+    prev = cur; prevOpts = opts;
     if (!cur.size) break;
   }
   const path = [];
@@ -394,8 +420,13 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
       });
     }
   }
-  // trajets : un par ressource à aller récolter dans chaque étape
-  steps.forEach(st => { st.spots = st.kind === 'g' ? 1 : st.ing.filter(o => o.gather >= 0.5).length; travels += st.spots; });
+  // trajets : un par spot de chaque étape, sauf si l'étape précédente était déjà dans une de ses zones
+  let pg = null;
+  steps.forEach(st => {
+    st.groups = spotGroups(st.kind === 'g' ? [st.r] : st.ing.filter(o => o.gather >= 0.5).map(o => o.rr));
+    st.spots = st.groups.length; st.hops = hops(pg, st.groups); travels += st.hops;
+    if (st.groups.length) pg = st.groups;
+  });
   return { steps, time: time + travels * travel, farm: time, travels, travel, xp: xpTotal, blocked };
 }
 
@@ -460,7 +491,7 @@ function profitRows(j, opts) {
   return rows;
 }
 
-export { gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
+export { resZones, spotGroups, gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
 
 // ================================================================ zones (« Où aller ? »)
 // Les zones viennent du texte MethodWakfu (« Région - zone1, zone2 & zone3 »), hétérogène : on normalise.

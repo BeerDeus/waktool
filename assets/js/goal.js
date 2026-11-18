@@ -1,10 +1,10 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=cbdf641d';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=cbdf641d';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, xpOf } from './model.js?v=cbdf641d';
-import { renderTabs } from './main.js?v=cbdf641d';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=cbdf641d';
-import { flash, initAudio } from './alert.js?v=cbdf641d';
+import { st } from './state.js?v=52ac1955';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=52ac1955';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, xpOf } from './model.js?v=52ac1955';
+import { renderTabs } from './main.js?v=52ac1955';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=52ac1955';
+import { flash, initAudio } from './alert.js?v=52ac1955';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', t: 0 };
@@ -101,6 +101,22 @@ function goalAfterFeed(first) {
 }
 
 // ================================================================ rendu
+// zones où pousse une ressource (ou les zones communes d'un groupe de spots), les 3 premières en clair
+const zoneName = z => (z.region && z.region !== z.name ? `${z.name} (${z.region})` : z.name);
+function zonesTxt(zs, max = 3) {
+  if (!zs.length) return '';
+  const all = zs.map(zoneName);
+  return `<span class="zone" title="${esc(all.join('\n'))}">📍 ${esc(all.slice(0, max).join(' · '))}${all.length > max ? ` <i>+${all.length - max}</i>` : ''}</span>`;
+}
+const groupZones = g => (g.zones.size ? resZones(g.rs[0]).filter(z => g.zones.has(z.key)) : []);
+// où aller pour l'étape en cours : zones communes si tous les ingrédients poussent au même endroit
+function whereHtml(gd) {
+  if (gd.kind === 'g') return zonesTxt(resZones(gd.s.r));
+  if (gd.kind !== 'c' || gd.ready) return '';
+  const g = (gd.s.groups || []).find(x => x.rs.includes(gd.next.rr));
+  if (g && g.rs.length > 1 && g.zones.size) return `${zonesTxt(groupZones(g))} <small class="same">${g.rs.length} ingrédients au même endroit</small>`;
+  return zonesTxt(resZones(gd.next.rr));
+}
 const pct = (a, b) => Math.max(0, Math.min(100, b ? a / b * 100 : 0));
 const bar = (p, cls = '') => `<div class="gbar2 ${cls}"><i style="width:${p.toFixed(1)}%"></i></div>`;
 
@@ -154,7 +170,7 @@ function heroHtml(c, gd) {
     </div>` : `<div class="need-list"><div class="need cur">${icon(mainItem(gd.s.r), 'ico')}<span class="need-n">≈ ${fmt(gd.s.items)} ${esc(mainItem(gd.s.r).name)}</span><b>${gd.s.plants ? `${fmt(gd.s.plants)} plantations · ` : ''}${fmt(gd.s.cuts * 1 + gd.s.seedActs)} récoltes</b></div></div>`;
   const left = c.plan.time, eta = r ? (XP.total(c.to) - xNow) / r * 3600 : null;
   return `<section class="hero ${gd.ready ? 'ready' : ''}">${head}${prog}
-    <div class="next">${visual}<div class="next-txt"><small>Prochaine action</small><b>${esc(a.title)}</b><span>${esc(a.sub)}</span></div></div>
+    <div class="next">${visual}<div class="next-txt"><small>Prochaine action</small><b>${esc(a.title)}</b><span>${esc(a.sub)}</span>${whereHtml(gd)}</div></div>
     ${ingRows}
     <div class="hero-foot">
       <span title="Récolte, plantation et crafts avec tes bonus + trajets entre spots (temps de pousse non compté)">⏱ ~${fmtDur(left)}${c.plan.travels ? ` · ${c.plan.travels} spot${c.plan.travels > 1 ? 's' : ''}` : ''}</span>
@@ -177,11 +193,11 @@ function stepsHtml(c) {
     if (s.kind === 'g') {
       const it = mainItem(s.r);
       return `<li class="${i ? '' : 'cur'}"><span class="lv">${s.from}–${s.to}</span>${icon(it, 'ico')}<span class="what"><b>${esc(it.name)}</b>
-        <small>≈ ${fmt(s.items)} ramassés${s.plants ? ` · ${fmt(s.plants)} plantations` : ''}</small></span><span class="t">~${fmtDur(s.t)}</span></li>`;
+        <small>≈ ${fmt(s.items)} ramassés${s.plants ? ` · ${fmt(s.plants)} plantations` : ''}</small>${zonesTxt(resZones(s.r), 2)}</span><span class="t">~${fmtDur(s.t)}</span></li>`;
     }
     const p = s.rec.res.item;
     return `<li class="${i ? '' : 'cur'}"><span class="lv">${s.from}–${s.to}</span>${icon(p, 'ico')}<span class="what"><b>${fmt(Math.ceil(s.crafts - 1e-6))} × ${esc(p.name)}</b>
-      <small>${s.ing.map(o => `${fmt(o.qty * Math.ceil(s.crafts - 1e-6))} ${esc(o.item.name)}${o.fromStock >= 1 ? ` <em>(${fmt(o.fromStock)} en sac)</em>` : ''}`).join(' · ')}${s.spots > 1 ? ` · ${s.spots} spots` : ''}</small></span><span class="t">~${fmtDur(s.t)}</span></li>`;
+      <small>${s.ing.map(o => `${fmt(o.qty * Math.ceil(s.crafts - 1e-6))} ${esc(o.item.name)}${o.fromStock >= 1 ? ` <em>(${fmt(o.fromStock)} en sac)</em>` : ''}`).join(' · ')}${s.spots > 1 ? ` · ${s.spots} spots` : ''}</small>${s.groups.length === 1 ? zonesTxt(groupZones(s.groups[0]), 2) : s.groups.map(g => zonesTxt(groupZones(g), 1)).join(' ')}</span><span class="t">~${fmtDur(s.t)}</span></li>`;
   }).join('');
   return `<section class="panel"><h4>Le plan <small>· recalculé à chaque action</small></h4><ol class="steps">${rows}</ol></section>`;
 }

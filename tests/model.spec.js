@@ -98,3 +98,18 @@ test('objectif : plan fini pour chaque métier de récolte', async ({ page }) =>
   });
   expect(Object.values(r).every(Boolean)).toBe(true);
 });
+
+test('objectif : ressources dans la même zone = un seul spot (Croton + Edelweiss → Fil Solide sans trajet)', async ({ page }) => {
+  const m = await mod(page, 'model');
+  const r = await m.evaluate(async M => {
+    await M.loadRecipes('herboriste');
+    const j = M.getJob('herboriste'), R = n => j.resources.find(x => x.name === n);
+    const p = M.goalPlan(j, 64, 0, 70, {}, { plant: true, craft: true, travel: 180 });
+    return { same: M.spotGroups([R('Croton'), R('Edelweiss')]).length, diff: M.spotGroups([R('Rhodon'), R('Croton')]).length,
+      steps: p.steps.map(s => (s.kind === 'g' ? s.r.name : s.rec.res.item.name)), travels: p.travels };
+  });
+  expect(r.same).toBe(1);
+  expect(r.diff).toBe(2);
+  expect(r.steps).toEqual(['Croton', 'Fil Solide']);
+  expect(r.travels).toBe(1);
+});
