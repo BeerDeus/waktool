@@ -1,11 +1,11 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=fd9ef4d8';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=fd9ef4d8';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=fd9ef4d8';
-import { renderTabs } from './main.js?v=fd9ef4d8';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=fd9ef4d8';
-import { growEvent } from './grow.js?v=fd9ef4d8';
-import { flash, initAudio } from './alert.js?v=fd9ef4d8';
+import { st } from './state.js?v=7681952f';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=7681952f';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=7681952f';
+import { renderTabs } from './main.js?v=7681952f';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=7681952f';
+import { growEvent } from './grow.js?v=7681952f';
+import { flash, initAudio } from './alert.js?v=7681952f';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, weather: 'ok', allSeeds: true, t: 0 };
@@ -54,7 +54,7 @@ function guide(c) {
     // étape suivante = craft qui utilise cette ressource : à garder en sac
     const nx = c.plan.steps[1], it = mainItem(s.r);
     const use = nx && nx.kind === 'c' && nx.ing.find(o => o.item.name === it.name);
-    return { kind: 'g', s, key: s.key, keep: use ? { n: use.qty * Math.ceil(nx.crafts - 1e-6), prod: nx.rec.res.item.name, crafts: Math.ceil(nx.crafts - 1e-6), at: nx.from } : null };
+    return { kind: 'g', s, steps: c.plan.steps, key: s.key, keep: use ? { n: use.qty * Math.ceil(nx.crafts - 1e-6), prod: nx.rec.res.item.name, crafts: Math.ceil(nx.crafts - 1e-6), at: nx.from } : null };
   }
   const S = stock(), N = Math.max(1, Math.ceil(s.crafts - 1e-6));
   const ing = s.ing.map(o => {
@@ -65,7 +65,7 @@ function guide(c) {
   // ingrédient à récolter : on reste sur celui qu'on récolte déjà (pas de trajet), sinon le plus avancé
   const todo = ing.filter(o => !o.ok), last = store.get('goal.last');
   const next = todo.find(o => o.item.name === last) || todo.slice().sort((a, b) => b.have / b.need - a.have / a.need)[0];
-  return { kind: 'c', s, N, ing, ready: !todo.length, now, next, key: s.key };
+  return { kind: 'c', s, steps: c.plan.steps, N, ing, ready: !todo.length, now, next, key: s.key };
 }
 
 // ================================================================ rythme réel (XP / heure sur les 10 dernières minutes)
@@ -117,13 +117,29 @@ function zonesTxt(zs, max = 3) {
   return `<span class="zone" title="${esc(all.join('\n'))}">📍 ${esc(all.slice(0, max).join(' · '))}${all.length > max ? ` <i>+${all.length - max}</i>` : ''}</span>`;
 }
 const groupZones = g => (g.zones.size ? resZones(g.rs[0]).filter(z => g.zones.has(z.key)) : []);
-// où aller pour l'étape en cours : zones communes si tous les ingrédients poussent au même endroit
+// zones d'un spot d'une étape, réduites à celles où pousse aussi l'étape suivante (pas d'aller-retour au changement d'étape)
+function stepZones(steps, i, g) {
+  const s = steps[i];
+  g ||= (s.groups || [])[0];
+  if (!g) return { zs: [], also: [] };
+  const own = groupZones(g), nx = steps[i + 1];
+  if (nx && (nx.groups || []).length) {
+    const nk = new Set(nx.groups.flatMap(x => [...x.zones]));
+    const both = own.filter(z => nk.has(z.key));
+    const also = [...new Set(nx.groups.filter(x => [...x.zones].some(k => both.some(z => z.key === k))).flatMap(x => x.rs).filter(r => !g.rs.includes(r)).map(r => mainItem(r).name))];
+    if (both.length && also.length) return { zs: both, also, at: nx.from };
+  }
+  return { zs: own, also: [] };
+}
+const alsoTxt = (z, long) => (z.also.length ? `<small class="same">${long ? `Va plutôt ici : ${esc(z.also.join(' et '))} y pousse aussi pour la suite (niv. ${z.at})` : `+ ${esc(z.also.join(', '))} ensuite`}</small>` : '');
+// où aller pour l'étape en cours : zones communes aux ingrédients, et de préférence à l'étape suivante
 function whereHtml(gd) {
-  if (gd.kind === 'g') return zonesTxt(resZones(gd.s.r));
+  if (gd.kind === 'g') { const z = stepZones(gd.steps, 0); return zonesTxt(z.zs) + alsoTxt(z, true); }
   if (gd.kind !== 'c' || gd.ready) return '';
   const g = (gd.s.groups || []).find(x => x.rs.includes(gd.next.rr));
-  if (g && g.rs.length > 1 && g.zones.size) return `${zonesTxt(groupZones(g))} <small class="same">${g.rs.length} ingrédients au même endroit</small>`;
-  return zonesTxt(resZones(gd.next.rr));
+  if (!g) return zonesTxt(resZones(gd.next.rr));
+  const z = stepZones(gd.steps, 0, g);
+  return zonesTxt(z.zs) + (g.rs.length > 1 && g.zones.size ? `<small class="same">${g.rs.length} ingrédients au même endroit</small>` : '') + alsoTxt(z, true);
 }
 const pct = (a, b) => Math.max(0, Math.min(100, b ? a / b * 100 : 0));
 const bar = (p, cls = '') => `<div class="gbar2 ${cls}"><i style="width:${p.toFixed(1)}%"></i></div>`;
@@ -208,11 +224,11 @@ function stepsHtml(c) {
     if (s.kind === 'g') {
       const it = mainItem(s.r);
       return `<li class="${i ? '' : 'cur'}"><span class="lv">${s.from}–${s.to}</span>${icon(it, 'ico')}<span class="what"><b>${esc(it.name)}</b>
-        <small>≈ ${fmt(s.items)} ramassés${s.plants ? ` · ${fmt(s.plants)} plantations` : ''}</small>${zonesTxt(resZones(s.r), 2)}</span><span class="t">~${fmtDur(s.t)}</span></li>`;
+        <small>≈ ${fmt(s.items)} ramassés${s.plants ? ` · ${fmt(s.plants)} plantations` : ''}</small>${(z => zonesTxt(z.zs, 2) + alsoTxt(z, false))(stepZones(c.plan.steps, i))}</span><span class="t">~${fmtDur(s.t)}</span></li>`;
     }
     const p = s.rec.res.item;
     return `<li class="${i ? '' : 'cur'}"><span class="lv">${s.from}–${s.to}</span>${icon(p, 'ico')}<span class="what"><b>${fmt(Math.ceil(s.crafts - 1e-6))} × ${esc(p.name)}</b>
-      <small>${s.ing.map(o => `${fmt(o.qty * Math.ceil(s.crafts - 1e-6))} ${esc(o.item.name)}${o.fromStock >= 1 ? ` <em>(${fmt(o.fromStock)} en sac)</em>` : ''}`).join(' · ')}${s.spots > 1 ? ` · ${s.spots} spots` : ''}</small>${s.groups.length === 1 ? zonesTxt(groupZones(s.groups[0]), 2) : s.groups.map(g => zonesTxt(groupZones(g), 1)).join(' ')}</span><span class="t">~${fmtDur(s.t)}</span></li>`;
+      <small>${s.ing.map(o => `${fmt(o.qty * Math.ceil(s.crafts - 1e-6))} ${esc(o.item.name)}${o.fromStock >= 1 ? ` <em>(${fmt(o.fromStock)} en sac)</em>` : ''}`).join(' · ')}${s.spots > 1 ? ` · ${s.spots} spots` : ''}</small>${s.groups.length === 1 ? (z => zonesTxt(z.zs, 2) + alsoTxt(z, false))(stepZones(c.plan.steps, i)) : s.groups.map(g => zonesTxt(stepZones(c.plan.steps, i, g).zs, 1)).join(' ')}</span><span class="t">~${fmtDur(s.t)}</span></li>`;
   }).join('');
   return `<section class="panel"><h4>Le plan <small>· recalculé à chaque action</small></h4><ol class="steps">${rows}</ol></section>`;
 }

@@ -100,3 +100,13 @@ test('filtre « Donne de l’XP seulement » (ressources et recettes)', async ({
   expect(rl.every(l => l > 10 && l <= 30)).toBe(true);
   await expect(page.locator('#list .xpline.none')).toHaveCount(0);
 });
+
+test('objectif : zones communes avec l’étape suivante (Croton puis Fil Solide avec Edelweiss)', async ({ page }) => {
+  const errs = trackErrors(page);
+  await seed(page, { 'lvl.herboriste': '64', 'xp.herboriste': '0', 'target.herboriste': '70', goal: { job: 'herboriste', travel: 3 }, 'bonus.global': { region: 30 } });
+  await page.goto('/?zz#objectif');
+  await expect(page.locator('.next-txt')).toContainText('Va plutôt ici : Edelweiss y pousse aussi');
+  await expect(page.locator('.next-txt .zone')).not.toContainText('Flaqueux'); // zone sans Edelweiss écartée
+  await expect(page.locator('.steps li').first()).toContainText('+ Edelweiss ensuite');
+  expect(errs).toEqual([]);
+});

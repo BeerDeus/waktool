@@ -518,6 +518,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 .next-txt .zone { margin-top: 4px; font-size: 14px; }
 .next-txt small.same { text-transform: none; letter-spacing: 0; color: var(--ok); font-size: 12px; font-weight: 600; }
 .steps .zone { font-size: 12px; }
+.steps .what small.same { color: var(--ok); font-weight: 600; }
 .steps .t { color: var(--mut); font-size: 12.5px; white-space: nowrap; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .tile { display: grid; grid-template-columns: 28px minmax(0, 1fr); grid-template-rows: auto auto; gap: 2px 8px; align-items: center; padding: 7px 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); cursor: text; }

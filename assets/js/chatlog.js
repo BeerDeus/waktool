@@ -5,13 +5,13 @@
 //   - le pont local (waktool-pont.cmd, PowerShell) qui sert le journal sur http://127.0.0.1:47811 ;
 //     Chrome interdit en effet aux sites d'ouvrir un fichier du dossier AppData (liste de blocage de l'API File System Access) ;
 //   - un fichier choisi à la main (copie du journal hors d'AppData, ou autre navigateur).
-import { st } from './state.js?v=fd9ef4d8';
-import { $, changed, esc, fmt, norm, sj, store } from './util.js?v=fd9ef4d8';
-import { ALL, HARVEST, XP, getJob, levelOf, lvlKey, progAt, touchProg, xpOf } from './model.js?v=fd9ef4d8';
-import { job, renderTabs } from './main.js?v=fd9ef4d8';
-import { renderJobCard } from './metiers.js?v=fd9ef4d8';
-import { initAudio, beep, toast } from './alert.js?v=fd9ef4d8';
-import { bag, goalAfterFeed, goalEvent, refreshObjectif } from './goal.js?v=fd9ef4d8';
+import { st } from './state.js?v=7681952f';
+import { $, changed, esc, fmt, norm, sj, store } from './util.js?v=7681952f';
+import { ALL, HARVEST, XP, getJob, levelOf, lvlKey, progAt, touchProg, xpOf } from './model.js?v=7681952f';
+import { job, renderTabs } from './main.js?v=7681952f';
+import { renderJobCard } from './metiers.js?v=7681952f';
+import { initAudio, beep, toast } from './alert.js?v=7681952f';
+import { bag, goalAfterFeed, goalEvent, refreshObjectif } from './goal.js?v=7681952f';
 
 // ================================================================ analyse d'une ligne
 const N = '([\\d\\s\\u00a0\\u202f]+)';
