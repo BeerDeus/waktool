@@ -585,3 +585,22 @@ body.pulse-card .hero { animation: card-pulse 1s ease-in-out 5; }
 /* objectif en affichage compact : pas de colonne Bonus, largeur réduite (fenêtre à côté du jeu) */
 body.obj-compact .layout { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
 body.obj-compact .side { display: none; }
+
+/* menu ☰ (outils) : chrono de pousse */
+.hright { position: relative; }
+.menu-pop { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; width: min(380px, calc(100vw - 24px)); display: grid; gap: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; box-shadow: 0 12px 40px rgb(0 0 0 / .35); }
+.menu-pop h4 { margin: 0; font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--mut); }
+.menu-pop p { margin: 0; }
+.menu-pop .gbtn { justify-self: start; }
+.menu-pop .lnk { justify-self: start; font-size: 13px; }
+.grow-clock { display: grid; }
+.grow-clock b { font-size: 30px; font-variant-numeric: tabular-nums; }
+.grow-clock small { color: var(--mut); font-size: 12px; }
+.grow-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+.grow-t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.grow-t th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: var(--mut); padding: 3px 4px; }
+.grow-t td { padding: 4px; border-top: 1px solid var(--line); white-space: nowrap; }
+.grow-t td small { color: var(--mut); }
+.grow-w { justify-self: start; }
+.grow-w button { padding: 5px 12px; }

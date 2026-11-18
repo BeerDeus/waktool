@@ -161,3 +161,29 @@ test('assistant : la prochaine action suit le sac, s’adapte à l’XP réelle 
   await expect(page.locator('#flash.big')).toContainText('Objectif atteint');
   expect(errs).toEqual([]);
 });
+
+test('menu ☰ : chrono de pousse depuis la dernière plantation réussie du journal', async ({ page }) => {
+  const errs = trackErrors(page);
+  await seed(page, { 'lvl.herboriste': '64', goal: { job: 'herboriste', grow: 5 } });
+  await page.goto('/?p#objectif');
+  await feed(page, [xp('09:00:00', 186, 9000)], true);
+  const t = new Date(Date.now() - 90e3).toTimeString().slice(0, 8), t2 = new Date(Date.now() - 60e3).toTimeString().slice(0, 8);
+  await feed(page, [
+    xp(t, 186, 8814), L(t, 'Vous avez perdu 1x Graine de Croton .'), // plantation réussie
+    L(t2, 'Le plant n\'a pas pris.'), L(t2, 'Vous avez perdu 1x Graine de Croton .'), // échec : ignoré
+  ]);
+  await page.click('#menu-btn');
+  await expect(page.locator('#menu-pop')).toBeVisible();
+  await expect(page.locator('[data-grow="from-log"]')).toContainText(`Croton à ${t}`);
+  await page.click('[data-grow-w="bad"]'); // mesure par météo défavorable
+  await page.click('[data-grow="from-log"]');
+  await expect(page.locator('#grow-t')).toContainText(/^1 min 3\d s$/);
+  await page.click('[data-grow="s2"]');
+  await page.click('[data-grow="s3"]');
+  await expect(page.locator('.grow-t')).toContainText('Croton');
+  await page.click('[data-grow-use="0"]');
+  expect(JSON.parse(await ls(page, 'goal'))).toMatchObject({ grow: 5, growBad: 1.5 });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#menu-pop')).toBeHidden();
+  expect(errs).toEqual([]);
+});

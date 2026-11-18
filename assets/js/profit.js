@@ -1,9 +1,9 @@
 // Waktool — module profit
-import { st } from './state.js?v=502a2738';
-import { $, esc, fmt, fmtK, icon, norm, sj } from './util.js?v=502a2738';
-import { HARVEST, PRICES, RD, XP, levelOf, loadRecipes, priceInput, profitRows } from './model.js?v=502a2738';
-import { chk } from './side.js?v=502a2738';
-import { segHtml } from './metiers.js?v=502a2738';
+import { st } from './state.js?v=d5853ef8';
+import { $, esc, fmt, fmtK, icon, norm, sj } from './util.js?v=d5853ef8';
+import { HARVEST, PRICES, RD, XP, levelOf, loadRecipes, priceInput, profitRows } from './model.js?v=d5853ef8';
+import { chk } from './side.js?v=d5853ef8';
+import { segHtml } from './metiers.js?v=d5853ef8';
 // ================================================================ page Rentabilité
 function renderProfit() {
   const el = $('#page-rentabilite');

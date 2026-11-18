@@ -1,13 +1,14 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=502a2738';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=502a2738';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, xpOf } from './model.js?v=502a2738';
-import { renderTabs } from './main.js?v=502a2738';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=502a2738';
-import { flash, initAudio } from './alert.js?v=502a2738';
+import { st } from './state.js?v=d5853ef8';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=d5853ef8';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, xpOf } from './model.js?v=d5853ef8';
+import { renderTabs } from './main.js?v=d5853ef8';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=d5853ef8';
+import { growEvent } from './grow.js?v=d5853ef8';
+import { flash, initAudio } from './alert.js?v=d5853ef8';
 
 // ================================================================ état : objectif + sac
-const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, allSeeds: true, t: 0 };
+const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, weather: 'ok', allSeeds: true, t: 0 };
 const goal = () => sj.get('goal', GOAL_DEF);
 const setGoal = o => sj.set('goal', { ...goal(), ...o, t: Date.now() });
 // sac : { t, items: { nom: quantité } } — mis à jour par le journal du chat, corrigé à la main (ventes, coffre…)
@@ -39,7 +40,7 @@ function ctx() {
   const craft = g.craft && (RD[j.key] || needRecipes(j.key));
   let plan = null;
   if (L !== null && to > L && (!g.craft || craft)) plan = goalPlan(j, L, x, to, stock(), { plant, craft: !!g.craft, travel: Math.max(0, +g.travel || 0) * 60,
-    field: { wild: Math.max(0, +g.wild || 0), cap: Math.max(1, +g.cap || 1), grow: Math.max(0, +g.grow || 0) * 60, allSeeds: g.allSeeds !== false } });
+    field: { wild: Math.max(0, +g.wild || 0), cap: Math.max(1, +g.cap || 1), grow: Math.max(0, +(g.weather === 'bad' ? g.growBad : g.grow) || 0) * 60, allSeeds: g.allSeeds !== false } });
   return { g, j, L, x, to, plant, plan, loading: g.craft && !craft };
 }
 
@@ -78,6 +79,7 @@ function rate(k) {
 
 // ================================================================ événements du journal (appelés par chatlog.js)
 function goalEvent(ev, mode) {
+  growEvent(ev);
   if (ev.type === 'got') { stockAdd(ev.name, ev.n); if (ITEMS[ev.name] && !ITEMS[ev.name].seed) store.set('goal.last', ev.name); }
   else if (ev.type === 'plant' || ev.type === 'used') stockAdd(ev.name, -ev.n);
   else if (ev.type === 'xp' && mode === 'live') { recent.push({ job: ev.job, gain: ev.gain, at: Date.now() }); if (recent.length > 400) recent.splice(0, 100); }
@@ -188,7 +190,8 @@ function heroHtml(c, gd) {
         ${c.g.plant ? `<label class="chk"><input type="checkbox" data-g="allSeeds" ${c.g.allSeeds !== false ? 'checked' : ''}> Graines récoltées sur chaque plant</label>
         <label class="chk" title="Plants trouvés en arrivant sur un nouveau spot">Plants sauvages à l’arrivée <input type="number" min="0" max="300" data-g="wild" value="${+c.g.wild}"></label>
         <label class="chk" title="Nombre de plants que tu entretiens sur un spot">Plants max sur un spot <input type="number" min="1" max="500" data-g="cap" value="${+c.g.cap}"></label>
-        <label class="chk" title="Temps entre la plantation et le stade où l’on peut récolter les graines">Temps de pousse <input type="number" min="0" max="60" step="0.5" data-g="grow" value="${+c.g.grow}"> min</label>` : ''}` : ''}
+        <label class="chk" title="Météo actuelle par rapport aux préférences de la plante (température, humidité)">Météo pour la plante <select data-g="weather"><option value="ok" ${c.g.weather !== 'bad' ? 'selected' : ''}>☀ favorable</option><option value="bad" ${c.g.weather === 'bad' ? 'selected' : ''}>☁ défavorable</option></select></label>
+        <label class="chk" title="Temps entre la plantation et le stade où l’on peut récolter les graines (mesurable avec le chrono du menu ☰)">Pousse <input type="number" min="0" max="60" step="0.5" data-g="grow" value="${+c.g.grow}"> min ☀ · <input type="number" min="0" max="60" step="0.5" data-g="growBad" value="${+c.g.growBad}"> min ☁</label>` : ''}` : ''}
         <label class="chk"><input type="checkbox" data-g="craft" ${c.g.craft ? 'checked' : ''}> Crafter quand ça accélère (fils…)</label>
         <label class="chk" title="Temps moyen pour aller d’un spot de récolte à un autre : plus il est long, moins le plan te fait changer de cible">Trajet entre 2 spots <input type="number" min="0" max="60" data-g="travel" value="${+c.g.travel || 0}"> min</label>
         <label class="chk">XP actuelle <input type="number" min="0" data-g="xp" value="${c.x}"></label>
@@ -293,7 +296,8 @@ page.addEventListener('change', e => {
   else if (k === 'plant' || k === 'craft') setGoal({ [k]: el.checked });
   else if (k === 'travel') setGoal({ travel: Math.max(0, Math.min(60, +el.value || 0)) });
   else if (k === 'allSeeds') setGoal({ allSeeds: el.checked });
-  else if (k === 'wild' || k === 'cap' || k === 'grow') setGoal({ [k]: Math.max(0, +el.value || 0) });
+  else if (k === 'wild' || k === 'cap' || k === 'grow' || k === 'growBad') setGoal({ [k]: Math.max(0, +el.value || 0) });
+  else if (k === 'weather') setGoal({ weather: el.value === 'bad' ? 'bad' : 'ok' });
   else if (k === 'alert') { setGoal({ alert: el.value }); return; }
   else if (k === 'lvl') {
     const v = el.value === '' ? null : Math.max(0, Math.min(250, +el.value));
