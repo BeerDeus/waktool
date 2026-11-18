@@ -5,13 +5,13 @@
 //   - le pont local (waktool-pont.cmd, PowerShell) qui sert le journal sur http://127.0.0.1:47811 ;
 //     Chrome interdit en effet aux sites d'ouvrir un fichier du dossier AppData (liste de blocage de l'API File System Access) ;
 //   - un fichier choisi à la main (copie du journal hors d'AppData, ou autre navigateur).
-import { st } from './state.js?v=d5853ef8';
-import { $, changed, esc, fmt, norm, sj, store } from './util.js?v=d5853ef8';
-import { ALL, HARVEST, XP, getJob, levelOf, lvlKey, xpOf } from './model.js?v=d5853ef8';
-import { job, renderTabs } from './main.js?v=d5853ef8';
-import { renderJobCard } from './metiers.js?v=d5853ef8';
-import { initAudio, beep, toast } from './alert.js?v=d5853ef8';
-import { goalAfterFeed, goalEvent, refreshObjectif } from './goal.js?v=d5853ef8';
+import { st } from './state.js?v=fd9ef4d8';
+import { $, changed, esc, fmt, norm, sj, store } from './util.js?v=fd9ef4d8';
+import { ALL, HARVEST, XP, getJob, levelOf, lvlKey, progAt, touchProg, xpOf } from './model.js?v=fd9ef4d8';
+import { job, renderTabs } from './main.js?v=fd9ef4d8';
+import { renderJobCard } from './metiers.js?v=fd9ef4d8';
+import { initAudio, beep, toast } from './alert.js?v=fd9ef4d8';
+import { bag, goalAfterFeed, goalEvent, refreshObjectif } from './goal.js?v=fd9ef4d8';
 
 // ================================================================ analyse d'une ligne
 const N = '([\\d\\s\\u00a0\\u202f]+)';
@@ -59,9 +59,11 @@ let lastRem = {}; // dernier « prochain niveau dans » lu, par métier (pour d�
 const resetParse = () => { lastRem = {}; };
 
 // ================================================================ progression (niveau + XP actuelle)
-function applyXp(ev, live) {
+// stale = ligne plus ancienne que la progression connue (autre PC) : on ne garde que le « reste » pour la ligne suivante
+function applyXp(ev, live, stale = false) {
   const k = ev.job, prev = lastRem[k], oldL = levelOf(k), oldX = xpOf(k);
   lastRem[k] = ev.rem;
+  if (stale) return { k, L: oldL, oldL, oldX, exact: false, stale: true };
   let L = oldL, exact = false;
   if (ev.up) {
     // montée : besoin du nouveau niveau = reste + (gain − reste d'avant) → niveau exact
@@ -75,6 +77,7 @@ function applyXp(ev, live) {
   if (L !== null) {
     store.set(lvlKey(k), String(L));
     store.set('xp.' + k, String(Math.max(0, XP.need(L) - ev.rem)));
+    touchProg(k, live === 'now' ? Date.now() : ev.ts);
   }
   ui.lastXp = { job: k, L, rem: ev.rem, gain: ev.gain };
   return { k, L, oldL, oldX, exact };
@@ -108,7 +111,8 @@ const MARK = () => sj.get('chat.mark', { at: 0 });
 // après le repère (site fermé), on rattrape tout (sac compris) puis un résumé. mod = date de modification du fichier.
 function feed(lines, first = false, mod = Date.now()) {
   const touched = new Map(), ts = stamp(lines, refTime(mod)), mark = MARK(), notes = [];
-  const rep = { n: 0, xp: 0, from: null, ups: {} };
+  const rep = { n: 0, xp: 0, from: null, ups: {} }, stale = new Set();
+  const bagT = first ? bag().t : 0; // sac mis à jour plus tard (autre PC) : les lignes plus anciennes n'y touchent pas
   let lastTs = 0;
   lines.forEach((line, i) => {
     const ev = parseLine(line);
@@ -117,11 +121,14 @@ function feed(lines, first = false, mod = Date.now()) {
     ev.ts = ts[i] || Date.now();
     const mode = !first ? 'live' : mark.at && ev.ts > mark.at ? 'replay' : 'silent';
     ui.lines++;
-    if (mode === 'silent') { if (ev.type === 'xp') touched.set(ev.job, applyXp(ev, false)); return; }
-    goalEvent(ev, mode);
+    const old = mode !== 'live' && ev.type === 'xp' && ev.ts <= progAt(ev.job);
+    if (old) stale.add(ev.job);
+    if (mode === 'silent') { if (ev.type === 'xp') { const i = applyXp(ev, false, old); if (!old) touched.set(ev.job, i); } return; }
+    if (mode === 'live' || ev.ts > bagT) goalEvent(ev, mode);
+    if (old) return;
     if (mode === 'replay') { rep.n++; rep.from ??= ev.ts; }
     if (ev.type !== 'xp') return;
-    const info = applyXp(ev, true);
+    const info = applyXp(ev, mode === 'live' ? 'now' : true);
     touched.set(info.k, info);
     const up = info.oldL !== null && info.L > info.oldL;
     if (mode === 'replay') { rep.xp += ev.gain; if (up) rep.ups[info.k] ??= info.oldL; return; }
@@ -130,6 +137,7 @@ function feed(lines, first = false, mod = Date.now()) {
   if (lastTs) sj.set('chat.mark', { at: Math.max(lastTs, mark.at) });
   if (first) {
     ui.summary = [...touched.values()].map(i => ({ k: i.k, L: levelOf(i.k), xp: xpOf(i.k), exact: i.exact }));
+    ui.stale = [...stale].filter(k => !touched.has(k));
     if (rep.n) {
       const ups = Object.entries(rep.ups).map(([k, l0]) => `${getJob(k).label} ${l0} → ${levelOf(k)}`).join(', ');
       notes.unshift(['Journal rattrapé', `Depuis ${new Date(rep.from).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} : +${fmt(rep.xp)} XP${ups ? ' · ' + ups : ''}`]);
@@ -300,6 +308,7 @@ function chatPanelHtml() {
     const j = getJob(x.k);
     return `<b>${esc(j.label)}</b> ${x.L === null ? '(niveau inconnu : renseigne-le ou attends une montée)' : `${x.L} · ${fmt(x.xp)} / ${fmt(XP.need(x.L))} XP`}`;
   }).join(' · ')}</p>` : '';
+  const old = ui.stale && ui.stale.length ? `<p class="meta">Ignoré (journal plus ancien que ta progression, ex. jouée sur un autre PC) : ${ui.stale.map(k => esc(getJob(k).label)).join(', ')}.</p>` : '';
   const btns = ui.src ? `${ui.state === 'paused' ? '<button type="button" class="gbtn small" data-chat="resume">▶ Reprendre</button>' : ''}<button type="button" class="lnk" data-chat="unlink">Délier</button>` : '';
   const setup = ui.src && ui.state !== 'wait' ? '' : `
     <ol class="bridge-steps">
@@ -317,7 +326,7 @@ function chatPanelHtml() {
   return `<section class="panel chat-box ${on ? 'on' : ''}" id="chat-box">
     <div class="panel-head"><h4>Journal du chat</h4><div class="chat-btns">${btns}</div></div>
     <p class="chat-status">${status}${ui.err ? ` · <span class="warn-txt">${esc(ui.err)}</span>` : ''}</p>
-    ${setup}${sum}
+    ${setup}${sum}${old}
     <div class="chat-opts">
       <label class="chk"><input type="checkbox" data-chatcfg="sound" ${c.sound ? 'checked' : ''}> Son des alertes</label>
       <label class="chk"><input type="checkbox" data-chatcfg="lvlup" ${c.lvlup ? 'checked' : ''}> Message à chaque niveau</label>

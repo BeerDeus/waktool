@@ -187,3 +187,31 @@ test('menu ☰ : chrono de pousse depuis la dernière plantation réussie du jou
   await expect(page.locator('#menu-pop')).toBeHidden();
   expect(errs).toEqual([]);
 });
+
+test('deux PC : un journal plus ancien que la progression connue (compte) est ignoré, un compte plus ancien aussi', async ({ page }) => {
+  const errs = trackErrors(page);
+  const mod = new Date('2020-03-10T18:00:00').getTime();
+  // progression venue du PC du boulot (via le compte) : niveau 50, mise à jour à 20:00
+  await seed(page, { 'lvl.herboriste': '50', 'xp.herboriste': '1000', 'at.herboriste': String(new Date('2020-03-10T20:00:00').getTime()),
+    'chat.mark': { at: new Date('2020-03-10T17:00:00').getTime() }, stock: { t: new Date('2020-03-10T20:00:00').getTime(), items: { 'Algue Narine': 50 } } });
+  await page.goto('/?d#objectif');
+  // journal du PC perso : s'arrête à 17:30, niveau 45 à l'époque
+  await feed(page, [
+    xp('16:00:00', 162, 6000), // avant le repère
+    xp('17:30:00', 162, 5838), L('17:30:00', 'Vous avez ramassé 4x Algue Narine .'), // après le repère mais avant 20:00
+  ], true, mod);
+  expect(await ls(page, 'lvl.herboriste')).toBe('50');
+  expect(await ls(page, 'xp.herboriste')).toBe('1000');
+  expect(await bag(page)).toEqual({ 'Algue Narine': 50 });
+  await expect(page.locator('#chat-box')).toContainText('Ignoré');
+  // une nouvelle ligne en direct, elle, compte
+  await feed(page, [xp('21:00:00', 186, 7000)]);
+  expect(await ls(page, 'xp.herboriste')).toBe(String(7575 - 7000));
+  // compte plus ancien que la progression locale : ignoré ; plus récent : appliqué
+  await page.evaluate(() => window.waktool.applyState({ levels: { herboriste: 44 }, progress: { herboriste: { xp: 5, at: 1 } } }));
+  expect(await ls(page, 'lvl.herboriste')).toBe('50');
+  await page.evaluate(() => window.waktool.applyState({ levels: { herboriste: 52 }, progress: { herboriste: { xp: 9, at: Date.now() + 5000 } } }));
+  expect(await ls(page, 'lvl.herboriste')).toBe('52');
+  expect(await ls(page, 'xp.herboriste')).toBe('9');
+  expect(errs).toEqual([]);
+});

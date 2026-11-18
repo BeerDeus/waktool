@@ -1,11 +1,11 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=d5853ef8';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=d5853ef8';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, xpOf } from './model.js?v=d5853ef8';
-import { renderTabs } from './main.js?v=d5853ef8';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=d5853ef8';
-import { growEvent } from './grow.js?v=d5853ef8';
-import { flash, initAudio } from './alert.js?v=d5853ef8';
+import { st } from './state.js?v=fd9ef4d8';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=fd9ef4d8';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=fd9ef4d8';
+import { renderTabs } from './main.js?v=fd9ef4d8';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=fd9ef4d8';
+import { growEvent } from './grow.js?v=fd9ef4d8';
+import { flash, initAudio } from './alert.js?v=fd9ef4d8';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, weather: 'ok', allSeeds: true, t: 0 };
@@ -303,8 +303,9 @@ page.addEventListener('change', e => {
     const v = el.value === '' ? null : Math.max(0, Math.min(250, +el.value));
     if (v !== levelOf(j.key)) store.set('xp.' + j.key, '0');
     store.set(lvlKey(j.key), v === null ? '' : String(v));
+    touchProg(j.key);
     renderTabs();
-  } else if (k === 'xp') store.set('xp.' + j.key, String(Math.max(0, +el.value || 0)));
+  } else if (k === 'xp') { store.set('xp.' + j.key, String(Math.max(0, +el.value || 0))); touchProg(j.key); }
   else if (k === 'to') {
     store.set('target.' + j.key, String(Math.max(1, Math.min(250, +el.value || 0))));
     const L = levelOf(j.key);

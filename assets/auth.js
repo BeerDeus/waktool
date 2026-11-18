@@ -102,6 +102,7 @@ onAuthStateChanged(auth, async u => {
     W.applyState(merged);
     const needPush = !snap.exists() ||
       Object.keys(merged.levels).some(k => (remote.levels || {})[k] === undefined) ||
+      Object.entries(local.progress || {}).some(([k, o]) => (o.at || 0) > (((remote.progress || {})[k] || {}).at || 0)) ||
       Object.entries(local.prices || {}).some(([id, v]) => !(remote.prices || {})[id] || remote.prices[id][1] < v[1]);
     if (needPush) await save();
     else { status = 'Synchronisé ✓'; render(); }

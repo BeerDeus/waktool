@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=d5853ef8';
-import { D, icon, jget, norm, sj, store } from './util.js?v=d5853ef8';
+import { st } from './state.js?v=fd9ef4d8';
+import { D, icon, jget, norm, sj, store } from './util.js?v=fd9ef4d8';
 
-import { job, renderPage } from './main.js?v=d5853ef8';
+import { job, renderPage } from './main.js?v=fd9ef4d8';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -79,6 +79,10 @@ const getJob = k => ALL.find(j => j.key === k);
 const lvlKey = k => 'lvl.' + k;
 const levelOf = k => { const v = store.get(lvlKey(k)); return v === null || v === '' || isNaN(+v) ? null : +v; };
 const xpOf = k => Math.max(0, +(store.get('xp.' + k) || 0));
+// date (ms) de la dernière mise à jour du niveau / de l'XP d'un métier (saisie, journal du chat, autre appareil via le compte) :
+// une ligne de journal plus ancienne (ex. lue sur un autre PC) ne l'écrase pas
+const progAt = k => +(store.get('at.' + k) || 0);
+const touchProg = (k, t = Date.now()) => store.set('at.' + k, String(Math.round(t)));
 const pins = () => jget('pins', []) || [];
 const setPins = a => store.set('pins', JSON.stringify(a));
 
@@ -520,7 +524,7 @@ function profitRows(j, opts) {
   return rows;
 }
 
-export { FIELD_DEF, plantCycle, spotIdle, resZones, spotGroups, gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
+export { progAt, touchProg, FIELD_DEF, plantCycle, spotIdle, resZones, spotGroups, gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
 
 // ================================================================ zones (« Où aller ? »)
 // Les zones viennent du texte MethodWakfu (« Région - zone1, zone2 & zone3 »), hétérogène : on normalise.

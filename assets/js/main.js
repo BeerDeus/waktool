@@ -1,13 +1,13 @@
 // Waktool — module main
-import { st } from './state.js?v=d5853ef8';
-import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=d5853ef8';
-import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, setPins, setPrices } from './model.js?v=d5853ef8';
-import { renderSide } from './side.js?v=d5853ef8';
-import { only, xponly, renderJobCard, renderMetiers } from './metiers.js?v=d5853ef8';
-import { renderProfit } from './profit.js?v=d5853ef8';
-import { renderZones } from './zones.js?v=d5853ef8';
-import { goal, bag, renderObjectif, goalCtx, goalGuide } from './goal.js?v=d5853ef8';
-import { feed as chatFeed } from './chatlog.js?v=d5853ef8';
+import { st } from './state.js?v=fd9ef4d8';
+import { $, changed, esc, icon, jget, listeners, sj, store } from './util.js?v=fd9ef4d8';
+import { ALL, CRAFTS, G_DEF, HARVEST, J_DEF, PRICES, allItems, bg, bjob, getJob, levelOf, lvlKey, pins, price, progAt, setPins, setPrices, touchProg } from './model.js?v=fd9ef4d8';
+import { renderSide } from './side.js?v=fd9ef4d8';
+import { only, xponly, renderJobCard, renderMetiers } from './metiers.js?v=fd9ef4d8';
+import { renderProfit } from './profit.js?v=fd9ef4d8';
+import { renderZones } from './zones.js?v=fd9ef4d8';
+import { goal, bag, renderObjectif, goalCtx, goalGuide } from './goal.js?v=fd9ef4d8';
+import { feed as chatFeed } from './chatlog.js?v=fd9ef4d8';
 // ================================================================ thème + PWA
 const THEMES = { auto: ['◐', 'Thème : automatique (système)'], light: ['☀', 'Thème : clair'], dark: ['☾', 'Thème : sombre'] };
 const themeBtn = $('#theme-btn');
@@ -141,6 +141,7 @@ window.waktool = {
       const xp = store.get('xp.' + j.key), tg = store.get('target.' + j.key), o = {};
       if (xp !== null && xp !== '') o.xp = +xp;
       if (tg !== null && tg !== '') o.target = +tg;
+      if (progAt(j.key)) o.at = progAt(j.key);
       if (j.type === 'harvest' && store.get('bonus.' + j.key)) o.bonus = bjob(j.key);
       if (Object.keys(o).length) progress[j.key] = o;
     });
@@ -169,16 +170,21 @@ window.waktool = {
     // objectif et sac : le plus récent gagne (le sac change en direct pendant le jeu)
     if (pf.goal && typeof pf.goal === 'object' && (pf.goal.t || 0) > (goal().t || 0)) store.set('goal', JSON.stringify(pf.goal));
     if (pf.stock && pf.stock.items && typeof pf.stock.items === 'object' && (pf.stock.t || 0) > bag().t) store.set('stock', JSON.stringify(pf.stock));
+    // progression venue d'un autre appareil : prise seulement si elle est au moins aussi récente que la nôtre
+    // (sans date : seulement si on n'en a pas non plus) — évite qu'un vieux journal ou un vieux compte écrase un niveau plus récent
+    const newer = {};
+    ALL.forEach(j => { const r = ((s.progress || {})[j.key] || {}).at; newer[j.key] = r ? r >= progAt(j.key) : !progAt(j.key); });
     ALL.forEach(j => {
       const v = s.levels && s.levels[j.key];
-      if (v !== undefined && v !== null) store.set(lvlKey(j.key), String(v));
+      if (v !== undefined && v !== null && newer[j.key]) store.set(lvlKey(j.key), String(v));
     });
     if (typeof pf.only === 'boolean') { only.checked = pf.only; store.set('only', pf.only ? '1' : '0'); }
     if (typeof pf.xponly === 'boolean') { xponly.checked = pf.xponly; store.set('xponly', pf.xponly ? '1' : '0'); }
     if (THEMES[pf.theme]) { store.set('theme', pf.theme); applyTheme(pf.theme); }
     if (pf.bonuses && typeof pf.bonuses === 'object') sj.set('bonus.global', { ...G_DEF, ...pf.bonuses });
     Object.entries(s.progress || {}).forEach(([k, o]) => {
-      if (o && typeof o.xp === 'number') store.set('xp.' + k, String(o.xp));
+      if (o && typeof o.xp === 'number' && newer[k] !== false) store.set('xp.' + k, String(o.xp));
+      if (o && typeof o.at === 'number' && o.at > progAt(k)) touchProg(k, o.at);
       if (o && typeof o.target === 'number') store.set('target.' + k, String(o.target));
       if (o && o.bonus && typeof o.bonus === 'object') sj.set('bonus.' + k, { ...J_DEF, ...o.bonus });
     });
@@ -186,10 +192,13 @@ window.waktool = {
   },
   // niveaux saisis par l'utilisateur (import de capture) : l'XP actuelle repart de 0 pour chaque niveau qui change
   setLevels(levels) {
-    for (const [k, v] of Object.entries(levels)) if (levelOf(k) !== +v) store.set('xp.' + k, '0');
-    this.applyState({ levels }); changed();
+    for (const [k, v] of Object.entries(levels)) {
+      if (levelOf(k) !== +v) store.set('xp.' + k, '0');
+      store.set(lvlKey(k), String(v)); touchProg(k);
+    }
+    renderAll(); changed();
   },
-  setXp(key, xp) { store.set('xp.' + key, String(xp)); renderAll(); changed(); },
+  setXp(key, xp) { store.set('xp.' + key, String(xp)); touchProg(key); renderAll(); changed(); },
   onChange(f) { listeners.push(f); },
   jobs: () => ALL.map(j => ({ key: j.key, label: j.label, icon: j.icon, type: j.type })),
   setPrices(map) { setPrices(map); renderPage(); if (st.page === 'metiers') renderJobCard(job()); changed(); },

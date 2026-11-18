@@ -82,7 +82,7 @@ test('changer de niveau remet l’XP actuelle à 0 (saisie et import)', async ({
   const r = await page.evaluate(() => [localStorage.getItem('waktool.xp.herboriste'), localStorage.getItem('waktool.xp.trappeur')]);
   expect(r).toEqual(['500', '0']);
   // la synchronisation du compte ne touche pas à l'XP
-  await page.evaluate(() => window.waktool.applyState({ levels: { paysan: 32 }, progress: { paysan: { xp: 777 } } }));
+  await page.evaluate(() => window.waktool.applyState({ levels: { paysan: 32 }, progress: { paysan: { xp: 777, at: Date.now() + 1000 } } }));
   expect(await page.evaluate(() => localStorage.getItem('waktool.xp.paysan'))).toBe('777');
 });
 

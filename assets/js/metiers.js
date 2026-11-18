@@ -1,10 +1,10 @@
 // Waktool — module metiers
-import { st } from './state.js?v=d5853ef8';
-import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=d5853ef8';
-import { expandShopping, farmInfo, PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=d5853ef8';
-import { renderSide } from './side.js?v=d5853ef8';
-import { renderProfit } from './profit.js?v=d5853ef8';
-import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=d5853ef8';
+import { st } from './state.js?v=fd9ef4d8';
+import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=fd9ef4d8';
+import { touchProg, expandShopping, farmInfo, PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=fd9ef4d8';
+import { renderSide } from './side.js?v=fd9ef4d8';
+import { renderProfit } from './profit.js?v=fd9ef4d8';
+import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=fd9ef4d8';
 // ================================================================ page Métiers
 const q = $('#q'), only = $('#only'), xponly = $('#xponly');
 only.checked = store.get('only') === '1';
@@ -81,6 +81,7 @@ $('#job-head').addEventListener('change', e => {
   // changement de niveau : l'XP actuelle repart de 0 (valeur explicite, pour écraser aussi celle du compte)
   if (el.dataset.jc === 'lvl' && el.value !== (store.get(k) ?? '')) store.set('xp.' + st.cur, '0');
   store.set(k, el.value);
+  if (el.dataset.jc !== 'target') touchProg(st.cur);
   renderTabs(); renderPage(); changed();
 });
 $('#job-head').addEventListener('click', e => {
