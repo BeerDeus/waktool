@@ -627,3 +627,6 @@ body.obj-compact .side { display: none; }
 .lvl-bot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .lvl-bot small { color: var(--mut); font-size: 12px; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .lvlbar i { transition: none; } .lvlbar.gain i::after { animation: none; } }
+.rain-line { text-transform: none !important; letter-spacing: 0 !important; font-size: 12.5px !important; font-weight: 600; color: var(--mut) !important; }
+.rain-line.good { color: var(--ok) !important; }
+.rain-line.bad { color: var(--ko) !important; }

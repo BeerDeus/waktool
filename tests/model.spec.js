@@ -135,3 +135,22 @@ test('objectif : pousse des plants (attente à l’arrivée, plafond de plants) 
   expect(r.slower).toBe(true);
   expect(r.idlePlan).toBe(true);
 });
+
+test('météo (données du jeu) : chance de plantation 70 % / 56 % et temps de pousse selon la plante', async ({ page }) => {
+  const m = await mod(page, 'model');
+  const r = await m.evaluate(M => {
+    const P = M.getJob('paysan'), H = M.getJob('herboriste');
+    const ble = P.resources.find(x => x.name === 'Blé'), croton = H.resources.find(x => x.name === 'Croton'), algue = H.resources.find(x => x.name === 'Algue Narine');
+    const g = M.bg(), set = w => localStorage.setItem('waktool.bonus.global', JSON.stringify({ ...g, weather: w }));
+    const out = { rain: [ble.rain, croton.rain, algue.rain] };
+    set(null); out.none = [M.weatherOk(ble), M.plantChance(ble)];
+    set(1); out.sun = [M.weatherOk(ble), M.plantChance(ble), M.weatherOk(algue), M.plantChance(algue)];
+    out.grow = [M.growOf(ble, { grow: 300, growBad: 600 }), M.growOf(algue, { grow: 300, growBad: 600 })];
+    return out;
+  });
+  expect(r.rain).toEqual([1, 1, 3]); // Blé ☀ (comme en jeu), Croton ☀, Algue Narine 🌧
+  expect(r.none).toEqual([null, 0.7]);
+  expect(r.sun[0]).toBe(true); expect(r.sun[1]).toBeCloseTo(0.7);
+  expect(r.sun[2]).toBe(false); expect(r.sun[3]).toBeCloseTo(0.56);
+  expect(r.grow).toEqual([300, 600]);
+});

@@ -1,9 +1,9 @@
 // Waktool — module side
-import { st } from './state.js?v=9da49358';
-import { $, changed, esc, fmt, fmt1, fmtK, sec, sj, store } from './util.js?v=9da49358';
-import { HARVEST, REGION, XP, activeTool, bestAt, bg, bjob, bonusXp, climate, levelOf, price, qtyStats } from './model.js?v=9da49358';
-import { renderJobCard } from './metiers.js?v=9da49358';
-import { job, renderPage } from './main.js?v=9da49358';
+import { st } from './state.js?v=640a266f';
+import { $, changed, esc, fmt, fmt1, fmtK, sec, sj, store } from './util.js?v=640a266f';
+import { HARVEST, REGION, XP, activeTool, bestAt, bg, bjob, bonusXp, climate, levelOf, price, qtyStats } from './model.js?v=640a266f';
+import { renderJobCard } from './metiers.js?v=640a266f';
+import { job, renderPage } from './main.js?v=640a266f';
 // ================================================================ panneau Bonus (colonne de droite)
 const chk = (id, on, label, extra = '') => `<label class="bchk"><input type="checkbox" data-b="${id}" ${on ? 'checked' : ''}> ${label}${extra}</label>`;
 const selB = (id, val, opts) => `<select data-b="${id}">${opts.map(([v, l]) => `<option value="${v}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
@@ -28,7 +28,8 @@ function situationHtml(j) {
     <div class="bgrp"><h5>Météo <small>(touche X en jeu)</small></h5>
       <label class="bchk">Température <span class="unit"><input type="number" data-b="g:temp" value="${g.temp ?? ''}" placeholder="—" min="-40" max="60"><i>°C</i></span>
         ${j && g.temp !== null && g.temp !== '' && j.resources.some(r => r.temp) ? climCount(j) : ''}</label>
-      <label class="bchk" title="70 % normalement, 56 % si l'humidité ne convient pas à la plante, 60 % en Havre-Sac">Chance de plantation <span class="unit"><input type="number" data-b="g:plantPct" value="${+g.plantPct || 70}" min="1" max="100"><i>%</i></span></label>
+      <label class="bchk" title="Météo en jeu (touche X) : la chance de plantation baisse (70 % → 56 %) si elle ne convient pas à la plante">Météo ${selB('g:weather', g.weather ?? '', [['', '—'], [1, '☀ Soleil'], [2, '☁ Nuageux'], [3, '🌧 Pluie']])}</label>
+      <label class="bchk" title="Quand la météo convient à la plante : 70 % normalement (60 % en Havre-Sac). Sinon 20 % de moins (56 %).">Chance de plantation <span class="unit"><input type="number" data-b="g:plantPct" value="${+g.plantPct || 70}" min="1" max="100"><i>%</i></span></label>
       <label class="bchk">Ralentissement hors plage <span class="unit"><input type="number" data-b="g:climMalus" value="${+g.climMalus || 0}" min="0" max="300"><i>%</i></span>
         <em class="warn-txt" title="Valeur non publiée par Ankama : à ajuster selon tes mesures en jeu">estim.</em></label>
       ${j && !j.resources.some(r => r.temp) ? '<p class="meta">Pas d’effet de la météo sur ce métier.</p>' : ''}
@@ -117,6 +118,7 @@ side.addEventListener('change', e => {
   if (scope === 'g') {
     const g = bg(); g[key] = val;
     if (key === 'temp') g.temp = el.value === '' ? null : +el.value;
+    if (key === 'weather') g.weather = el.value === '' ? null : +el.value;
     if (key === 'turbo' && val) g.speed = 0; // non cumulables
     if (key === 'speed' && val) g.turbo = false;
     sj.set('bonus.global', g);

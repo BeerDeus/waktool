@@ -1,9 +1,9 @@
 // Waktool — menu ☰ (en-tête) : chrono de pousse. Départ = dernière plantation réussie lue dans le journal du chat
 // (ou maintenant), puis « stade 2 » / « stade 3 » cliqués quand la plante change en jeu. Le temps mesuré peut devenir
 // le temps de pousse utilisé par l'assistant d'objectif.
-import { $, changed, esc, jget, store } from './util.js?v=9da49358';
-import { HARVEST } from './model.js?v=9da49358';
-import { goal, setGoal, refreshObjectif } from './goal.js?v=9da49358';
+import { $, changed, esc, jget, store } from './util.js?v=640a266f';
+import { HARVEST, weatherOk } from './model.js?v=640a266f';
+import { goal, setGoal, refreshObjectif } from './goal.js?v=640a266f';
 
 const RES_BY_SEED = {};
 HARVEST.forEach(j => j.resources.forEach(r => (r.seed || []).forEach(it => { if (it && it.name) RES_BY_SEED[it.name] = { j, r }; })));
@@ -12,7 +12,8 @@ const run = () => jget('grow.run', null); // { start, src: 'journal'|'manuel', s
 const setRun = o => store.set('grow.run', JSON.stringify(o));
 const measures = () => jget('grow.measures', []) || [];
 let lastPlant = jget('grow.lastPlant', null), failNext = false, wSel = null;
-const pickW = () => wSel || (goal().weather === 'bad' ? 'bad' : 'ok');
+// météo de la mesure : choisie à la main, sinon déduite du panneau Météo pour la dernière plante plantée
+const pickW = () => wSel || (lastPlant && RES_BY_SEED[lastPlant.seed] && weatherOk(RES_BY_SEED[lastPlant.seed].r) === false ? 'bad' : 'ok');
 
 // événements du journal (appelé par goal.js) : « Le plant n'a pas pris. » précède la graine perdue d'un échec
 function growEvent(ev) {
@@ -37,12 +38,12 @@ function html() {
   if (!r) {
     const w = pickW();
     body = `<p class="meta">Plante une graine (sans plant sauvage de la même espèce à côté), lance le chrono, puis clique quand la plante change de stade en jeu.</p>
-      <div class="seg grow-w" role="group" aria-label="Météo pour la plante">${[['ok', '☀ Météo favorable'], ['bad', '☁ Défavorable']].map(([v, l]) => `<button type="button" data-grow-w="${v}" class="${w === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="seg grow-w" role="group" aria-label="Météo pour la plante">${[['ok', '✓ Bonne météo'], ['bad', '✗ Mauvaise météo']].map(([v, l]) => `<button type="button" data-grow-w="${v}" class="${w === v ? 'on' : ''}">${l}</button>`).join('')}</div>
       ${lp ? `<button type="button" class="gbtn small" data-grow="from-log">▶ Depuis la plantation de ${esc(lp.res || lp.seed)} à ${hhmm(lp.at)}</button>` : '<p class="meta">Aucune plantation récente lue dans le journal.</p>'}
       <button type="button" class="lnk" data-grow="now">▶ Démarrer maintenant</button>`;
   } else {
     const el = now - r.start;
-    body = `<p class="grow-clock"><b id="grow-t">${mmss(el)}</b><small>${r.res ? esc(r.res) : 'plante'} · ${r.w === 'bad' ? '☁ météo défavorable' : '☀ météo favorable'} · départ ${hhmm(r.start)}${r.src === 'journal' ? ' (journal)' : ''}</small></p>
+    body = `<p class="grow-clock"><b id="grow-t">${mmss(el)}</b><small>${r.res ? esc(r.res) : 'plante'} · ${r.w === 'bad' ? '✗ mauvaise météo' : '✓ bonne météo'} · départ ${hhmm(r.start)}${r.src === 'journal' ? ' (journal)' : ''}</small></p>
       <div class="grow-btns">
         ${r.s2 ? `<span class="pos">Stade 2 : ${mmss(r.s2)}</span>` : '<button type="button" class="gbtn small" data-grow="s2">Stade 2 atteint (couper)</button>'}
         <button type="button" class="gbtn small" data-grow="s3">Stade 3 atteint (graines)</button>
@@ -50,9 +51,9 @@ function html() {
       <button type="button" class="lnk" data-grow="cancel">Annuler</button>`;
   }
   const list = m.length ? `<table class="grow-t"><thead><tr><th>Plante</th><th>Stade 2</th><th>Stade 3</th><th></th></tr></thead><tbody>${m.slice().reverse().map((x, i) => `<tr>
-      <td>${x.w === 'bad' ? '☁' : '☀'} ${esc(x.res || '—')}${x.lvl !== null && x.lvl !== undefined ? ` <small>niv. ${x.lvl}</small>` : ''}</td><td>${x.s2 ? mmss(x.s2) : '—'}</td><td>${mmss(x.s3)}</td>
+      <td>${x.w === 'bad' ? '✗' : '✓'} ${esc(x.res || '—')}${x.lvl !== null && x.lvl !== undefined ? ` <small>niv. ${x.lvl}</small>` : ''}</td><td>${x.s2 ? mmss(x.s2) : '—'}</td><td>${mmss(x.s3)}</td>
       <td><button type="button" class="lnk" data-grow-use="${m.length - 1 - i}" title="Utiliser comme temps de pousse de l’assistant">utiliser</button> <button type="button" class="lnk" data-grow-del="${m.length - 1 - i}" title="Supprimer">✕</button></td></tr>`).join('')}</tbody></table>` : '';
-  return `<h4>Chrono de pousse</h4>${body}${list}<p class="meta">Temps de pousse de l’assistant : <b>☀ ${+g.grow || 0} min · ☁ ${+g.growBad || 0} min</b> (Objectif › Réglages).</p>`;
+  return `<h4>Chrono de pousse</h4>${body}${list}<p class="meta">Temps de pousse de l’assistant : <b>${+g.grow || 0} min (bonne météo) · ${+g.growBad || 0} min (mauvaise)</b> (Objectif › Réglages).</p>`;
 }
 let tick = null;
 function render() {

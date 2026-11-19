@@ -1,10 +1,10 @@
 // Waktool — module metiers
-import { st } from './state.js?v=9da49358';
-import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=9da49358';
-import { touchProg, expandShopping, farmInfo, PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=9da49358';
-import { renderSide } from './side.js?v=9da49358';
-import { renderProfit } from './profit.js?v=9da49358';
-import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=9da49358';
+import { st } from './state.js?v=640a266f';
+import { $, D, ago, changed, esc, fmt, fmt1, fmtDur, fmtK, icon, norm, sec, store } from './util.js?v=640a266f';
+import { RAIN, weatherOk, touchProg, expandShopping, farmInfo, PLANTABLE, bonusPlant, plantChance, PRICES, RARITY, RD, XP, bestAt, bonusXp, climate, craftPlan, dur, getJob, harvestPlan, levelOf, lvlKey, needRecipes, pins, price, priceInput, prodLabel, qtyStats, setPrices, srcLabel, xpOf } from './model.js?v=640a266f';
+import { renderSide } from './side.js?v=640a266f';
+import { renderProfit } from './profit.js?v=640a266f';
+import { go, job, renderPage, renderTabs, subOf, togglePin } from './main.js?v=640a266f';
 // ================================================================ page Métiers
 const q = $('#q'), only = $('#only'), xponly = $('#xponly');
 only.checked = store.get('only') === '1';
@@ -121,6 +121,10 @@ function renderResources(j) {
     if (r.temp) {
       const lbl = { ok: 'température idéale', hot: 'trop chaud : actions ralenties', cold: 'trop froid : actions ralenties' }[cl] || 'plage de température idéale';
       $('h3', n).insertAdjacentHTML('beforeend', ` <span class="temp ${cl || ''}" title="${lbl}">${cl === 'hot' ? '▲' : cl === 'cold' ? '▼' : '●'} ${r.temp[0]} à ${r.temp[1]} °C</span>`);
+    }
+    if (PLANTABLE.includes(j.key) && RAIN[r.rain]) {
+      const ok = weatherOk(r), [ic, nm] = RAIN[r.rain];
+      $('h3', n).insertAdjacentHTML('beforeend', ` <span class="temp rain ${ok === true ? 'ok' : ok === false ? 'hot' : ''}" title="Météo idéale pour planter : ${nm}${ok === false ? ' — météo actuelle défavorable : 56 % de réussite au lieu de 70 %' : ok ? ' — météo actuelle idéale' : ''}">${ic} ${nm}</span>`);
     }
     $('.zones', n).innerHTML = (r.zones || []).map(z => `<li>${esc(z)}</li>`).join('') +
       (r.zones_en || []).map(z => `<li class="en" title="Nom anglais (wiki), zone récente">${esc(z)} (EN)</li>`).join('') +

@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=9da49358';
-import { D, icon, jget, norm, sj, store } from './util.js?v=9da49358';
+import { st } from './state.js?v=640a266f';
+import { D, icon, jget, norm, sj, store } from './util.js?v=640a266f';
 
-import { job, renderPage } from './main.js?v=9da49358';
+import { job, renderPage } from './main.js?v=640a266f';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -87,7 +87,7 @@ const pins = () => jget('pins', []) || [];
 const setPins = a => store.set('pins', JSON.stringify(a));
 
 // ================================================================ bonus
-const G_DEF = { region: null, temp: null, climMalus: 50, plantPct: 70, wakfu: 0, havre: false, stasis: 0, turbo: false, xpExtra: 0, speed: 0,
+const G_DEF = { region: null, temp: null, weather: null, climMalus: 50, plantPct: 70, wakfu: 0, havre: false, stasis: 0, turbo: false, xpExtra: 0, speed: 0,
   sceau: false, potion: false, pacte: 0, mdc: 0, captchat: 0, qtyExtra: 0 };
 const J_DEF = { tool: 'auto', pet: '', petLvl: 50, conso: false, casque: false, sacs: 0, gateau: false };
 const REGION = [
@@ -104,11 +104,19 @@ function bonusPlant() {
   const g = bg();
   return (g.region ?? 0) + (g.havre ? 10 : 0) + (+g.wakfu || 0) + (+g.xpExtra || 0);
 }
-const plantChance = () => Math.max(1, Math.min(100, +bg().plantPct || 70)) / 100;
+// météo (humidité) idéale pour planter, donnée du jeu (idealRain) : 1 soleil, 2 nuageux, 3 pluie, 0/absent = indifférent
+const RAIN = { 1: ['☀', 'soleil'], 2: ['☁', 'nuageux'], 3: ['🌧', 'pluie'] };
+// la météo actuelle (panneau Météo) convient-elle à la plante ? null = météo non renseignée ou plante indifférente
+function weatherOk(r) {
+  const w = +bg().weather || 0;
+  return !w || !r || !RAIN[r.rain] ? null : r.rain === w;
+}
+// chance de plantation : 70 % si la météo convient (réglable), 20 % de moins sinon (56 %)
+const plantChance = r => Math.max(1, Math.min(100, +bg().plantPct || 70)) / 100 * (weatherOk(r) === false ? 0.8 : 1);
 // cycle « champ perso » sur la ressource r au niveau L : tentatives de plantation (XP si réussite),
 // coupe de la plante, et récolte des graines nécessaires pour replanter (XP de récolte aussi)
 function fieldCycle(j, r, L, qAvg) {
-  const diff = Math.max(0, L - r.level), d = dur(j.key, diff, r), p = plantChance();
+  const diff = Math.max(0, L - r.level), d = dur(j.key, diff, r), p = plantChance(r);
   const plants = 1 / p, seedActs = plants / Math.max(qAvg, 0.01);
   const acts = plants + 1 + seedActs;
   const xp = XP.per(diff, bonusPlant()) + XP.per(diff, bonusXp()) * (1 + seedActs);
@@ -297,27 +305,30 @@ function harvestPlan(j, from, xp0, to, strat) {
 // ================================================================ assistant d'objectif
 // plantation dans la nature (réglages page Objectif) : plants sauvages trouvés en arrivant sur un spot, plants max
 // entretenus sur le spot, temps de pousse (s), graines récoltées sur chaque plant avant de le couper
-const FIELD_DEF = { wild: 40, cap: 100, grow: 300, allSeeds: true };
+const FIELD_DEF = { wild: 40, cap: 100, grow: 300, growBad: 300, allSeeds: true };
+// temps de pousse : bonne ou mauvaise météo pour la plante (mesurables avec le chrono de pousse)
+const growOf = (r, fd) => (weatherOk(r) === false ? fd.growBad ?? fd.grow : fd.grow);
 // cycle d'un plant : planter (1/p tentatives, XP si ça prend) → pousse → récolter les graines → couper (objets).
 // La pousse ne freine que si l'on a trop peu de plants : chaque plant ne repasse qu'après `grow` secondes.
 function plantCycle(j, r, L, qAvg, fd = FIELD_DEF) {
-  const diff = Math.max(0, L - r.level), d = dur(j.key, diff, r), plants = 1 / plantChance();
+  const diff = Math.max(0, L - r.level), d = dur(j.key, diff, r), plants = 1 / plantChance(r);
   const seedActs = fd.allSeeds ? Math.max(1, plants / qAvg) : plants / qAvg;
   const a = (plants + 1 + seedActs) * d;
-  const time = Math.max(a, (fd.grow + a) / Math.max(1, fd.cap));
+  const time = Math.max(a, (growOf(r, fd) + a) / Math.max(1, fd.cap));
   return { d, plants, seedActs, a, time, growBound: time > a + 1e-9, xp: XP.per(diff, bonusPlant()) + XP.per(diff, bonusXp()) * (1 + seedActs) };
 }
 // attente à l'arrivée sur un spot : on récolte les graines des plants sauvages, on replante, on coupe les sauvages,
 // puis on attend que les premiers plants plantés aient poussé (s'il reste du temps)
 function spotIdle(j, rs, L, qAvg, fd = FIELD_DEF) {
-  let busy = 0;
+  let busy = 0, grow = 0;
   for (const r of rs) {
+    grow = Math.max(grow, growOf(r, fd));
     if (!PLANTABLE.includes(j.key) || !(r.seed || []).length) return 0;
     const d = dur(j.key, Math.max(0, L - r.level), r);
-    const n = Math.min(fd.wild * qAvg, Math.max(0, fd.cap - fd.wild) / plantChance()); // tentatives de plantation
+    const n = Math.min(fd.wild * qAvg, Math.max(0, fd.cap - fd.wild) / plantChance(r)); // tentatives de plantation
     busy += (n + fd.wild) * d;
   }
-  return Math.max(0, fd.grow - busy);
+  return Math.max(0, grow - busy);
 }
 // coût d'un objet d'une ressource au niveau L : XP gagnée et temps passé pour le ramasser.
 // plant = on replante les graines dans la nature (voir plantCycle), sinon récolte seule.
@@ -524,7 +535,7 @@ function profitRows(j, opts) {
   return rows;
 }
 
-export { progAt, touchProg, FIELD_DEF, plantCycle, spotIdle, resZones, spotGroups, gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
+export { RAIN, weatherOk, growOf, progAt, touchProg, FIELD_DEF, plantCycle, spotIdle, resZones, spotGroups, gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
 
 // ================================================================ zones (« Où aller ? »)
 // Les zones viennent du texte MethodWakfu (« Région - zone1, zone2 & zone3 »), hétérogène : on normalise.

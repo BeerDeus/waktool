@@ -123,3 +123,17 @@ test('objectif : barre de progression depuis le départ, ↺ repart du niveau ac
   await expect(page.locator('.hero-prog-m')).toContainText('· 5 %'); // 2 729 / 50 625
   expect(errs).toEqual([]);
 });
+
+test('météo : sélecteur du panneau, icône sur les ressources, avertissement dans Objectif', async ({ page }) => {
+  const errs = trackErrors(page);
+  await seed(page, { 'lvl.herboriste': '64', 'xp.herboriste': '0', 'target.herboriste': '70', goal: { job: 'herboriste' }, 'bonus.global': { region: 30, weather: 3 } });
+  await page.goto('/?w#objectif');
+  await expect(page.locator('.rain-line')).toContainText('Météo idéale pour planter : soleil');
+  await expect(page.locator('.rain-line')).toContainText('56 %');
+  await page.selectOption('[data-b="g:weather"]', '1');
+  await expect(page.locator('.rain-line')).toContainText('c’est le cas');
+  await page.goto('/?w2#herboriste');
+  await page.click('[data-sub="res"]');
+  await expect(page.locator('#list .rain').first()).toBeVisible();
+  expect(errs).toEqual([]);
+});

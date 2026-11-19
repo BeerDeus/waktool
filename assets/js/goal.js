@@ -1,14 +1,14 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=9da49358';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=9da49358';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=9da49358';
-import { renderTabs } from './main.js?v=9da49358';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=9da49358';
-import { growEvent } from './grow.js?v=9da49358';
-import { flash, initAudio } from './alert.js?v=9da49358';
+import { st } from './state.js?v=640a266f';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=640a266f';
+import { RAIN, weatherOk, bg, HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=640a266f';
+import { renderTabs } from './main.js?v=640a266f';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=640a266f';
+import { growEvent } from './grow.js?v=640a266f';
+import { flash, initAudio } from './alert.js?v=640a266f';
 
 // ================================================================ état : objectif + sac
-const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, weather: 'ok', allSeeds: true, t: 0 };
+const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, allSeeds: true, t: 0 };
 const goal = () => sj.get('goal', GOAL_DEF);
 const setGoal = o => sj.set('goal', { ...goal(), ...o, t: Date.now() });
 // sac : { t, items: { nom: quantité } } — mis à jour par le journal du chat, corrigé à la main (ventes, coffre…)
@@ -40,7 +40,7 @@ function ctx() {
   const craft = g.craft && (RD[j.key] || needRecipes(j.key));
   let plan = null;
   if (L !== null && to > L && (!g.craft || craft)) plan = goalPlan(j, L, x, to, stock(), { plant, craft: !!g.craft, travel: Math.max(0, +g.travel || 0) * 60,
-    field: { wild: Math.max(0, +g.wild || 0), cap: Math.max(1, +g.cap || 1), grow: Math.max(0, +(g.weather === 'bad' ? g.growBad : g.grow) || 0) * 60, allSeeds: g.allSeeds !== false } });
+    field: { wild: Math.max(0, +g.wild || 0), cap: Math.max(1, +g.cap || 1), grow: Math.max(0, +g.grow || 0) * 60, growBad: Math.max(0, +g.growBad || 0) * 60, allSeeds: g.allSeeds !== false } });
   return { g, j, L, x, to, plant, plan, loading: g.craft && !craft };
 }
 
@@ -138,13 +138,20 @@ function stepZones(steps, i, g) {
 }
 const alsoTxt = (z, long) => (z.also.length ? `<small class="same">${long ? `Va plutôt ici : ${esc(z.also.join(' et '))} y pousse aussi pour la suite (niv. ${z.at})` : `+ ${esc(z.also.join(', '))} ensuite`}</small>` : '');
 // où aller pour l'étape en cours : zones communes aux ingrédients, et de préférence à l'étape suivante
+// météo idéale pour planter la ressource (donnée du jeu) et avertissement si la météo actuelle ne convient pas
+function rainHtml(r, plant) {
+  if (!plant || !r || !RAIN[r.rain]) return '';
+  const [ic, nm] = RAIN[r.rain], ok = weatherOk(r), cur = RAIN[+bg().weather];
+  return `<small class="rain-line ${ok === false ? 'bad' : ok ? 'good' : ''}">${ic} Météo idéale pour planter : ${nm}${ok === false ? ` · il fait ${cur[0]} ${cur[1]} : 56 % de réussite au lieu de 70 %` : ok ? ' · ✓ c’est le cas' : ' · indique la météo dans le panneau Météo'}</small>`;
+}
 function whereHtml(gd) {
-  if (gd.kind === 'g') { const z = stepZones(gd.steps, 0); return zonesTxt(z.zs) + alsoTxt(z, true); }
+  if (gd.kind === 'g') { const z = stepZones(gd.steps, 0); return zonesTxt(z.zs) + alsoTxt(z, true) + rainHtml(gd.s.r, gd.s.plants > 0); }
   if (gd.kind !== 'c' || gd.ready) return '';
   const g = (gd.s.groups || []).find(x => x.rs.includes(gd.next.rr));
-  if (!g) return zonesTxt(resZones(gd.next.rr));
+  const rain = rainHtml(gd.next.rr, gd.next.plants > 0);
+  if (!g) return zonesTxt(resZones(gd.next.rr)) + rain;
   const z = stepZones(gd.steps, 0, g);
-  return zonesTxt(z.zs) + (g.rs.length > 1 && g.zones.size ? `<small class="same">${g.rs.length} ingrédients au même endroit</small>` : '') + alsoTxt(z, true);
+  return zonesTxt(z.zs) + (g.rs.length > 1 && g.zones.size ? `<small class="same">${g.rs.length} ingrédients au même endroit</small>` : '') + alsoTxt(z, true) + rain;
 }
 const pct = (a, b) => Math.max(0, Math.min(100, b ? a / b * 100 : 0));
 const bar = (p, cls = '') => `<div class="gbar2 ${cls}"><i style="width:${p.toFixed(1)}%"></i></div>`;
@@ -241,8 +248,7 @@ function heroHtml(c, gd) {
         ${c.g.plant ? `<label class="chk"><input type="checkbox" data-g="allSeeds" ${c.g.allSeeds !== false ? 'checked' : ''}> Graines récoltées sur chaque plant</label>
         <label class="chk" title="Plants trouvés en arrivant sur un nouveau spot">Plants sauvages à l’arrivée <input type="number" min="0" max="300" data-g="wild" value="${+c.g.wild}"></label>
         <label class="chk" title="Nombre de plants que tu entretiens sur un spot">Plants max sur un spot <input type="number" min="1" max="500" data-g="cap" value="${+c.g.cap}"></label>
-        <label class="chk" title="Météo actuelle par rapport aux préférences de la plante (température, humidité)">Météo pour la plante <select data-g="weather"><option value="ok" ${c.g.weather !== 'bad' ? 'selected' : ''}>☀ favorable</option><option value="bad" ${c.g.weather === 'bad' ? 'selected' : ''}>☁ défavorable</option></select></label>
-        <label class="chk" title="Temps entre la plantation et le stade où l’on peut récolter les graines (mesurable avec le chrono du menu ☰)">Pousse <input type="number" min="0" max="60" step="0.5" data-g="grow" value="${+c.g.grow}"> min ☀ · <input type="number" min="0" max="60" step="0.5" data-g="growBad" value="${+c.g.growBad}"> min ☁</label>` : ''}` : ''}
+        <label class="chk" title="Temps entre la plantation et le stade où l’on peut récolter les graines (mesurable avec le chrono du menu ☰). La météo du panneau Météo choisit le bon temps pour chaque plante.">Pousse <input type="number" min="0" max="60" step="0.5" data-g="grow" value="${+c.g.grow}"> min bonne météo · <input type="number" min="0" max="60" step="0.5" data-g="growBad" value="${+c.g.growBad}"> min mauvaise</label>` : ''}` : ''}
         <label class="chk"><input type="checkbox" data-g="craft" ${c.g.craft ? 'checked' : ''}> Crafter quand ça accélère (fils…)</label>
         <label class="chk" title="Temps moyen pour aller d’un spot de récolte à un autre : plus il est long, moins le plan te fait changer de cible">Trajet entre 2 spots <input type="number" min="0" max="60" data-g="travel" value="${+c.g.travel || 0}"> min</label>
         <label class="chk">XP actuelle <input type="number" min="0" data-g="xp" value="${c.x}"></label>
@@ -354,7 +360,6 @@ page.addEventListener('change', e => {
   else if (k === 'travel') setGoal({ travel: Math.max(0, Math.min(60, +el.value || 0)) });
   else if (k === 'allSeeds') setGoal({ allSeeds: el.checked });
   else if (k === 'wild' || k === 'cap' || k === 'grow' || k === 'growBad') setGoal({ [k]: Math.max(0, +el.value || 0) });
-  else if (k === 'weather') setGoal({ weather: el.value === 'bad' ? 'bad' : 'ok' });
   else if (k === 'alert') { setGoal({ alert: el.value }); return; }
   else if (k === 'lvl') {
     const v = el.value === '' ? null : Math.max(0, Math.min(250, +el.value));
