@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=0cd23a3a';
-import { D, icon, jget, norm, sj, store } from './util.js?v=0cd23a3a';
+import { st } from './state.js?v=94ebe13e';
+import { D, icon, jget, norm, sj, store } from './util.js?v=94ebe13e';
 
-import { job, renderPage } from './main.js?v=0cd23a3a';
+import { job, renderPage } from './main.js?v=94ebe13e';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -311,17 +311,20 @@ function harvestPlan(j, from, xp0, to, strat) {
 // ================================================================ assistant d'objectif
 // plantation dans la nature (réglages page Objectif) : plants sauvages trouvés en arrivant sur un spot, plants max
 // entretenus sur le spot, temps de pousse (s), graines récoltées sur chaque plant avant de le couper
-const FIELD_DEF = { wild: 40, cap: 100, grow: 300, growBad: 300, allSeeds: true };
+// valeurs mesurées dans les journaux : ~20 plants sauvages en arrivant, ~20 min avant de pouvoir Récolter (graines) un plant planté,
+// Récolter seulement les graines nécessaires pour replanter
+const FIELD_DEF = { wild: 20, cap: 100, grow: 1200, growBad: 1200, allSeeds: false };
 // temps de pousse : bonne ou mauvaise météo pour la plante (mesurables avec le chrono de pousse)
 const growOf = (r, fd) => (weatherOk(r) === false ? fd.growBad ?? fd.grow : fd.grow);
-// cycle d'un plant : planter (1/p tentatives, XP si ça prend) → pousse → récolter les graines → couper (objets).
+// cycle d'un plant : Planter (1/p tentatives, XP si ça prend) → pousse → Récolter (graines, sur une partie des plants) → Couper (fruits).
 // La pousse ne freine que si l'on a trop peu de plants : chaque plant ne repasse qu'après `grow` secondes.
+// ta = temps d'actions, tg = temps imposé par la pousse ; deux plantes du même spot s'alternent (voir craftOption).
 function plantCycle(j, r, L, qAvg, fd = FIELD_DEF) {
   const diff = Math.max(0, L - r.level), d = dur(j.key, diff, r), plants = 1 / plantChance(r);
   const seedActs = fd.allSeeds ? Math.max(1, plants / qAvg) : plants / qAvg;
   const a = (plants + 1 + seedActs) * d;
-  const time = Math.max(a, (growOf(r, fd) + a) / Math.max(1, fd.cap));
-  return { d, plants, seedActs, a, time, growBound: time > a + 1e-9, xp: XP.per(diff, bonusPlant()) + XP.per(diff, bonusXp()) * (1 + seedActs) };
+  const tg = (growOf(r, fd) + a) / Math.max(1, fd.cap), time = Math.max(a, tg);
+  return { d, plants, seedActs, a, tg, time, growBound: time > a + 1e-9, xp: XP.per(diff, bonusPlant()) + XP.per(diff, bonusXp()) * (1 + seedActs) };
 }
 // attente à l'arrivée sur un spot : on récolte les graines des plants sauvages, on replante, on coupe les sauvages,
 // puis on attend que les premiers plants plantés aient poussé (s'il reste du temps)
@@ -342,9 +345,10 @@ function gatherUnit(j, r, L, qAvg, plant, fd = FIELD_DEF) {
   const diff = Math.max(0, L - r.level);
   if (plant && PLANTABLE.includes(j.key) && seedOf(r)) {
     const f = plantCycle(j, r, L, qAvg, fd);
-    return { xp: f.xp / qAvg, t: f.time / qAvg, plants: f.plants / qAvg, cuts: 1 / qAvg, seedActs: f.seedActs / qAvg, growBound: f.growBound };
+    return { xp: f.xp / qAvg, t: f.time / qAvg, ta: f.a / qAvg, tg: f.tg / qAvg, plants: f.plants / qAvg, cuts: 1 / qAvg, seedActs: f.seedActs / qAvg, growBound: f.growBound };
   }
-  return { xp: XP.per(diff, bonusXp()) / qAvg, t: dur(j.key, diff, r) / qAvg, plants: 0, cuts: 1 / qAvg, seedActs: 0 };
+  const d = dur(j.key, diff, r) / qAvg;
+  return { xp: XP.per(diff, bonusXp()) / qAvg, t: d, ta: d, tg: 0, plants: 0, cuts: 1 / qAvg, seedActs: 0 };
 }
 const CRAFT_T = 2; // s par craft (atelier), approximatif
 // option « récolter les ingrédients d'une recette puis crafter » au niveau L pour gagner `need` XP, stock S déjà en sac.
@@ -362,7 +366,13 @@ function craftOption(j, rec, L, qAvg, plant, need, S, fd = FIELD_DEF) {
   const xpOf = N => N * c + ing.reduce((a, g) => a + Math.max(0, g.qty * N - g.have) * g.u.xp, 0);
   let lo = 0, hi = need / c;
   for (let k = 0; k < 50; k++) { const m = (lo + hi) / 2; if (xpOf(m) >= need) hi = m; else lo = m; }
-  const N = hi, t = ing.reduce((a, g) => a + Math.max(0, g.qty * N - g.have) * g.u.t, 0) + N * CRAFT_T;
+  // temps : par spot, les ingrédients qui y poussent s'alternent pendant la pousse → max(actions cumulées, pousse la plus longue)
+  const N = hi, n = g => Math.max(0, g.qty * N - g.have);
+  let t = N * CRAFT_T;
+  for (const sp of spotGroups(ing.map(g => g.rr))) {
+    const gs = ing.filter(g => sp.rs.includes(g.rr));
+    t += Math.max(gs.reduce((a, g) => a + n(g) * g.u.ta, 0), Math.max(...gs.map(g => n(g) * g.u.tg)));
+  }
   return { kind: 'c', key: 'c:' + rec.id, rec, N, t, c, ing };
 }
 // zones d'une ressource (index des zones) et groupes de ressources récoltables au même endroit
@@ -389,7 +399,9 @@ const sharesSpot = (a, b) => a.some(x => b.some(y => [...y.zones].some(k => x.zo
 // trajets pour passer d'une option à l'autre : un par spot, sauf si on est déjà dans une zone du nouveau
 const hops = (prev, cur) => cur.length - (prev && sharesSpot(prev, cur) ? 1 : 0);
 // temps perdu en changeant d'option : trajets + attente de pousse sur chaque nouveau spot
-const switchCost = (prev, cur, travel) => travel * hops(prev, cur) + cur.reduce((a, g) => a + (g.idle || 0), 0);
+// (pas d'attente sur un spot déjà en culture : on y travaille les plants existants pendant que les nouveaux poussent)
+const known = (prev, g) => !!prev && prev.some(x => [...g.zones].some(k => x.zones.has(k)));
+const switchCost = (prev, cur, travel) => travel * hops(prev, cur) + cur.reduce((a, g) => a + (known(prev, g) ? 0 : g.idle || 0), 0);
 
 // plan vers un objectif de niveau. Changer de spot coûte un trajet (travel, en s) : on cherche le chemin le plus court
 // en temps total (récolte + crafts + trajets) par programmation dynamique sur les niveaux, ce qui évite de changer de
@@ -481,7 +493,7 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
   steps.forEach(st => {
     st.groups = withIdle(spotGroups(st.kind === 'g' ? [st.r] : st.ing.filter(o => o.gather >= 0.5).map(o => o.rr)), st.from);
     st.spots = st.groups.length; st.hops = hops(pg, st.groups); travels += st.hops;
-    st.idle = st.groups.reduce((a, g) => a + (g.idle || 0), 0); idle += st.idle;
+    st.idle = st.groups.reduce((a, g) => a + (known(pg, g) ? 0 : g.idle || 0), 0); idle += st.idle;
     if (st.groups.length) pg = st.groups;
   });
   return { steps, time: time + travels * travel + idle, farm: time, travels, travel, idle, xp: xpTotal, blocked };

@@ -46,7 +46,7 @@ test('objectif : niveau, cible, plan, sac modifiable, affichage compact', async 
   await page.press('[data-g="lvl"]', 'Enter');
   await page.fill('[data-g="to"]', '62');
   await page.press('[data-g="to"]', 'Enter');
-  await expect(page.locator('.next-txt b')).toContainText(/Récolte|Crafte/);
+  await expect(page.locator('.next-txt b')).toContainText(/Cultive|Crafte/);
   await expect(page.locator('.steps li').first()).toBeVisible();
   await expect(page.locator('.hero-prog-r b')).toHaveText('62');
   const tile = page.locator('#g-bag [data-stock]').first();

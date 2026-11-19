@@ -1,15 +1,22 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=0cd23a3a';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=0cd23a3a';
-import { seedOf, RAIN, weatherOk, bg, HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=0cd23a3a';
-import { renderTabs } from './main.js?v=0cd23a3a';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=0cd23a3a';
-import { growEvent } from './grow.js?v=0cd23a3a';
-import { flash, initAudio } from './alert.js?v=0cd23a3a';
+import { st } from './state.js?v=94ebe13e';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=94ebe13e';
+import { seedOf, RAIN, weatherOk, bg, HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=94ebe13e';
+import { renderTabs } from './main.js?v=94ebe13e';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=94ebe13e';
+import { growEvent } from './grow.js?v=94ebe13e';
+import { flash, initAudio } from './alert.js?v=94ebe13e';
 
 // ================================================================ état : objectif + sac
-const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, allSeeds: true, t: 0 };
-const goal = () => sj.get('goal', GOAL_DEF);
+// plantation : valeurs mesurées dans les journaux (20 plants sauvages, 20 min avant de pouvoir Récolter, graines récoltées au besoin)
+const FIELD_V = 2, FIELD_KEYS = { wild: 20, cap: 100, grow: 20, growBad: 20, allSeeds: false };
+const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', ...FIELD_KEYS, fv: FIELD_V, t: 0 };
+function goal() {
+  const g = sj.get('goal', GOAL_DEF);
+  // anciennes valeurs par défaut (pousse 5 min, 40 sauvages…) : remplacées par les valeurs mesurées
+  if (g.fv !== FIELD_V) { Object.assign(g, FIELD_KEYS, { fv: FIELD_V }); sj.set('goal', g); }
+  return g;
+}
 const setGoal = o => sj.set('goal', { ...goal(), ...o, t: Date.now() });
 // sac : { t, items: { nom: quantité } } — mis à jour par le journal du chat, corrigé à la main (ventes, coffre…)
 const bag = () => { const b = jget('stock', null); return b && b.items ? b : { t: 0, items: {} }; };
@@ -34,7 +41,7 @@ const mainItem = r => (r.normal || []).find(i => i !== r.plantItem) || (r.normal
 const seedItem = r => seedOf(r);
 
 // ================================================================ calcul : plan + prochaine action
-const LOCK_V = 2; // à changer quand le modèle change : les anciens verrous sont abandonnés
+const LOCK_V = 3; // à changer quand le modèle change : les anciens verrous sont abandonnés
 function ctx() {
   const g = goal(), j = goalJob(), L = levelOf(j.key);
   const to = targetOf(j, L), x = L === null ? 0 : Math.min(xpOf(j.key), XP.need(L) - 1);
@@ -129,7 +136,7 @@ function activeRate(k) {
   const now = Date.now(), ev = recent.filter(e => e.job === k && now - e.at < 15 * 60000);
   if (ev.length < 10) return null;
   let t = 0, xp = 0;
-  for (let i = 1; i < ev.length; i++) { t += Math.min(60000, ev[i].at - ev[i - 1].at); xp += ev[i].gain; }
+  for (let i = 1; i < ev.length; i++) { t += Math.min(20000, ev[i].at - ev[i - 1].at); xp += ev[i].gain; } // attentes (pousse, pauses) exclues
   return t >= 60000 ? xp / t * 3600e3 : null;
 }
 // calage du modèle sur ton rythme réel (par métier), au plus une fois par minute, lissé
@@ -151,6 +158,8 @@ function goalAfterFeed(first) {
 }
 
 // ================================================================ rendu
+// actions d'une étape : Planter (tentatives) / Récolter (graines) / Couper (fruits)
+const actsTxt = s => [s.plants >= 0.5 && `${fmt(s.plants)} Planter`, s.seedActs >= 0.5 && `${fmt(s.seedActs)} Récolter`, `${fmt(s.cuts)} Couper`].filter(Boolean).join(' · ');
 // zones où pousse une ressource (ou les zones communes d'un groupe de spots), les 3 premières en clair
 const zoneName = z => (z.region && z.region !== z.name ? `${z.name} (${z.region})` : z.name);
 function zonesTxt(zs, max = 3) {
@@ -188,7 +197,7 @@ function whereHtml(gd) {
   const rain = rainHtml(gd.next.rr, gd.next.plants > 0);
   if (!g) return zonesTxt(resZones(gd.next.rr)) + rain;
   const z = stepZones(gd.steps, 0, g);
-  return zonesTxt(z.zs) + (g.rs.length > 1 && g.zones.size ? `<small class="same">${g.rs.length} ingrédients au même endroit</small>` : '') + alsoTxt(z, true) + rain;
+  return zonesTxt(z.zs) + (g.rs.length > 1 && g.zones.size ? `<small class="same">${g.rs.length} ingrédients au même endroit : alterne entre eux pendant la pousse</small>` : '') + alsoTxt(z, true) + rain;
 }
 const pct = (a, b) => Math.max(0, Math.min(100, b ? a / b * 100 : 0));
 const bar = (p, cls = '') => `<div class="gbar2 ${cls}"><i style="width:${p.toFixed(1)}%"></i></div>`;
@@ -197,14 +206,14 @@ function actionText(gd) {
   if (gd.kind === 'g') {
     const it = mainItem(gd.s.r);
     const k = gd.keep;
-    return { title: `Récolte ${it.name}`, sub: `${gd.s.plants ? 'Graines, coupe, replante' : 'Récolte en boucle'} jusqu’au niveau ${gd.s.to}`
-      + (k ? `. Garde-les : au niveau ${k.at}, ${fmt(k.crafts)} ${k.prod} en utiliseront ${fmt(k.n)}.` : '') };
+    return { title: `Cultive ${gd.s.r.name}`, sub: `${gd.s.plants ? 'Récolter et Couper les plants mûrs, Planter toutes les graines' : 'Couper en boucle'} jusqu’au niveau ${gd.s.to}`
+      + (k ? `. Garde les ${it.name} : au niveau ${k.at}, ${fmt(k.crafts)} ${k.prod} en utiliseront ${fmt(k.n)}.` : '') };
   }
   if (gd.kind === 'c') {
     const prod = gd.s.rec.res.item.name;
     if (gd.ready) return { title: `Crafte ${fmt(gd.N)} × ${prod}`, sub: 'Tu as tous les ingrédients : direction l’atelier.' };
     const ok = gd.ing.filter(o => o.ok);
-    return { title: `Récolte ${gd.next.item.name}`, sub: `${ok.length ? `Assez de ${ok.map(o => o.item.name).join(', ')} ✓ · ` : ''}encore ${fmt(gd.next.left)} pour crafter ${fmt(gd.N)} ${prod}` };
+    return { title: `Cultive ${gd.next.rr.name}`, sub: `${ok.length ? `Assez de ${ok.map(o => o.item.name).join(', ')} ✓ · ` : ''}encore ${fmt(gd.next.left)} ${gd.next.item.name} pour crafter ${fmt(gd.N)} ${prod}` };
   }
   return { title: '', sub: '' };
 }
@@ -272,7 +281,7 @@ function heroHtml(c, gd) {
   const ingRows = gd.kind === 'c' ? `<div class="need-list">${gd.ing.map(o => `<div class="need ${o.ok ? 'ok' : ''} ${gd.next === o ? 'cur' : ''}">
       ${icon(o.item, 'ico')}<span class="need-n">${esc(o.item.name)}</span><b>${fmt(Math.min(o.have, o.need))} / ${fmt(o.need)}</b>${bar(pct(o.have, o.need))}${o.ok ? '<i class="tick">✓</i>' : ''}</div>`).join('')}
       <div class="need prod">${icon(gd.s.rec.res.item, 'ico')}<span class="need-n">${esc(gd.s.rec.res.item.name)}</span><b>${gd.now ? `${fmt(Math.min(gd.now, gd.N))} faisables` : '—'} / ${fmt(gd.N)}</b>${bar(pct(gd.now, gd.N))}</div>
-    </div>` : `<div class="need-list"><div class="need cur">${icon(mainItem(gd.s.r), 'ico')}<span class="need-n">≈ ${fmt(gd.s.items)} ${esc(mainItem(gd.s.r).name)}</span><b>${gd.s.plants ? `${fmt(gd.s.plants)} plantations · ` : ''}${fmt(gd.s.cuts * 1 + gd.s.seedActs)} récoltes</b></div></div>`;
+    </div>` : `<div class="need-list"><div class="need cur">${icon(mainItem(gd.s.r), 'ico')}<span class="need-n">≈ ${fmt(gd.s.items)} ${esc(mainItem(gd.s.r).name)}</span><b>${actsTxt(gd.s)}</b></div></div>`;
   const left = c.plan.time, eta = r ? (XP.total(c.to) - xNow) / r * 3600 : null;
   return `<section class="hero ${gd.ready ? 'ready' : ''}">${head}${prog}
     <div class="next">${visual}<div class="next-txt"><small>Prochaine action</small><b>${esc(a.title)}</b><span>${esc(a.sub)}</span>${whereHtml(gd)}</div></div>
@@ -282,7 +291,7 @@ function heroHtml(c, gd) {
       ${r ? `<span title="XP gagnée ces 10 dernières minutes">⚡ ${fmt(r)} XP/h · fin dans ~${fmtDur(eta)}</span>` : ''}
       <details class="opts"><summary>Réglages</summary>
         ${PLANTABLE.includes(j.key) ? `<label class="chk"><input type="checkbox" data-g="plant" ${c.g.plant ? 'checked' : ''}> Replanter les graines (XP de plantation)</label>
-        ${c.g.plant ? `<label class="chk"><input type="checkbox" data-g="allSeeds" ${c.g.allSeeds !== false ? 'checked' : ''}> Graines récoltées sur chaque plant</label>
+        ${c.g.plant ? `<label class="chk"><input type="checkbox" data-g="allSeeds" ${c.g.allSeeds ? 'checked' : ''}> Récolter les graines de chaque plant <small>(sinon juste ce qu’il faut pour replanter)</small></label>
         <label class="chk" title="Plants trouvés en arrivant sur un nouveau spot">Plants sauvages à l’arrivée <input type="number" min="0" max="300" data-g="wild" value="${+c.g.wild}"></label>
         <label class="chk" title="Nombre de plants que tu entretiens sur un spot">Plants max sur un spot <input type="number" min="1" max="500" data-g="cap" value="${+c.g.cap}"></label>
         <label class="chk" title="Temps entre la plantation et le stade où l’on peut récolter les graines (mesurable avec le chrono du menu ☰). La météo du panneau Météo choisit le bon temps pour chaque plante.">Pousse <input type="number" min="0" max="60" step="0.5" data-g="grow" value="${+c.g.grow}"> min bonne météo · <input type="number" min="0" max="60" step="0.5" data-g="growBad" value="${+c.g.growBad}"> min mauvaise</label>` : ''}` : ''}
@@ -303,7 +312,7 @@ function stepsHtml(c) {
     if (s.kind === 'g') {
       const it = mainItem(s.r);
       return `<li class="${i ? '' : 'cur'}"><span class="lv">${s.from}–${s.to}</span>${icon(it, 'ico')}<span class="what"><b>${esc(it.name)}</b>
-        <small>≈ ${fmt(s.items)} ramassés${s.plants ? ` · ${fmt(s.plants)} plantations` : ''}</small>${(z => zonesTxt(z.zs, 2) + alsoTxt(z, false))(stepZones(c.plan.steps, i))}</span><span class="t">~${fmtDur(s.t)}</span></li>`;
+        <small>≈ ${fmt(s.items)} ${esc(mainItem(s.r).name)} · ${actsTxt(s)}</small>${(z => zonesTxt(z.zs, 2) + alsoTxt(z, false))(stepZones(c.plan.steps, i))}</span><span class="t">~${fmtDur(s.t)}</span></li>`;
     }
     const p = s.rec.res.item;
     return `<li class="${i ? '' : 'cur'}"><span class="lv">${s.from}–${s.to}</span>${icon(p, 'ico')}<span class="what"><b>${fmt(Math.ceil(s.crafts - 1e-6))} × ${esc(p.name)}</b>

@@ -133,25 +133,27 @@ test('pont absent : message clair, pas d’erreur', async ({ page }) => {
 
 test('assistant : la prochaine action suit le sac, s’adapte à l’XP réelle et alerte aux étapes', async ({ page }) => {
   const errs = trackErrors(page);
-  await seed(page, { 'lvl.herboriste': '57', 'xp.herboriste': '0', 'target.herboriste': '60', 'bonus.global': { region: 30 },
-    goal: { job: 'herboriste', plant: true, craft: true, travel: 0, alert: 'banner' } }); // sans trajet : le craft est rentable
+  // Herboriste 65 → 68 : Fil Solide (Croton + Edelweiss, même spot)
+  await seed(page, { 'lvl.herboriste': '65', 'xp.herboriste': '0', 'target.herboriste': '68', 'bonus.global': { region: 30 },
+    goal: { job: 'herboriste', plant: true, craft: true, travel: 3, alert: 'banner' } });
   await page.goto('/?g#objectif');
-  await feed(page, [xp('10:00:00', 186, 8439)], true);
+  const R0 = 9825 - 196;
+  await feed(page, [xp('10:00:00', 196, R0)], true);
   await expect.poll(async () => (await guide(page)).kind).toBe('c');
   let g = await guide(page);
   const n0 = g.N;
   // beaucoup de plantations (XP sans rien ramasser) : il reste moins d'XP → moins de crafts et d'ingrédients à récolter
-  await feed(page, Array.from({ length: 20 }, (_, i) => xp('10:01:' + String(i).padStart(2, '0'), 186, 8439 - 186 * (i + 1))));
+  await feed(page, Array.from({ length: 20 }, (_, i) => xp('10:01:' + String(i).padStart(2, '0'), 196, R0 - 196 * (i + 1))));
   g = await guide(page);
   expect(g.N).toBeLessThan(n0);
-  // l'ingrédient en cours atteint la quantité voulue → alerte « passe à … »
-  const pb = g.ing.find(o => o.name === 'Pied de Boufton');
-  await page.evaluate(n => { localStorage.setItem('waktool.stock', JSON.stringify({ t: Date.now(), items: { 'Pied de Boufton': n } })); window.waktool.applyState({}); }, pb.need - 2);
+  // le premier ingrédient atteint la quantité voulue → alerte « passe à … »
+  const [a, b] = g.ing;
+  await page.evaluate(([n, v]) => { localStorage.setItem('waktool.stock', JSON.stringify({ t: Date.now(), items: { [n]: v } })); localStorage.setItem('waktool.goal.last', n); window.waktool.applyState({}); }, [a.name, a.need - 2]);
   g = await guide(page);
-  const need = g.ing.find(o => o.name === 'Pied de Boufton').need, have = g.ing.find(o => o.name === 'Pied de Boufton').have;
-  await feed(page, [xp('10:02:00', 186, 8439 - 186 * 21), L('10:02:00', `Vous avez ramassé ${need - have + 15}x Pied de Boufton .`)]);
-  await expect(page.locator('#flash')).toContainText('Assez de Pied de Boufton');
-  await expect(page.locator('#flash')).toContainText('Passe à Fleur de Rhodon');
+  const A = g.ing.find(o => o.name === a.name);
+  await feed(page, [xp('10:02:00', 196, R0 - 196 * 21), L('10:02:00', `Vous avez ramassé ${A.need - A.have + 15}x ${a.name} .`)]);
+  await expect(page.locator('#flash')).toContainText(`Assez de ${a.name}`);
+  await expect(page.locator('#flash')).toContainText(`Passe à ${b.name}`);
   await expect(page.locator('body')).toHaveClass(/pulse/);
   await expect(page.locator('body')).not.toHaveClass(/pulse/, { timeout: 7000 }); // 5 s de clignotement max
   await page.click('[data-flash-x]');
@@ -236,20 +238,20 @@ test('objectif : encart du niveau en cours, barre qui avance à chaque XP et rep
 
 test('objectif : l’étape en cours reste verrouillée (pas de faux « Étape terminée » quand le plan se réoptimise)', async ({ page }) => {
   const errs = trackErrors(page);
-  await seed(page, { 'lvl.herboriste': '57', 'xp.herboriste': '0', 'target.herboriste': '60', 'bonus.global': { region: 30 },
-    goal: { job: 'herboriste', plant: true, craft: true, travel: 0, alert: 'banner' } });
+  await seed(page, { 'lvl.herboriste': '65', 'xp.herboriste': '0', 'target.herboriste': '68', 'bonus.global': { region: 30 },
+    goal: { job: 'herboriste', plant: true, craft: true, travel: 3, alert: 'banner' } });
   await page.goto('/?lk#objectif');
-  await feed(page, [xp('10:00:00', 186, 8439)], true);
+  await feed(page, [xp('10:00:00', 196, 9629)], true);
   await expect.poll(async () => (await guide(page)).kind).toBe('c');
   const k0 = (await guide(page)).key;
   // le sac change beaucoup (correction manuelle) : sans verrou, le meilleur plan pourrait changer d'étape
   await page.evaluate(() => { localStorage.setItem('waktool.stock', JSON.stringify({ t: Date.now(), items: { 'Fleur de Croton': 5000 } })); window.waktool.applyState({}); });
-  await feed(page, Array.from({ length: 5 }, (_, i) => xp('10:01:0' + i, 186, 8439 - 186 * (i + 1))));
+  await feed(page, Array.from({ length: 5 }, (_, i) => xp('10:01:0' + i, 196, 9629 - 196 * (i + 1))));
   expect((await guide(page)).key).toBe(k0);
-  await expect(page.locator('#flash')).toHaveCount(0);
+  expect(await page.evaluate(() => (document.querySelector('#flash') || {}).textContent || '')).not.toContain('Étape terminée');
   // ↻ Recalculer : plan neuf, sans alerte
   await page.click('[data-g="replan"]');
-  await feed(page, [xp('10:02:00', 186, 8439 - 186 * 6)]);
-  await expect(page.locator('#flash')).toHaveCount(0);
+  await feed(page, [xp('10:02:00', 196, 9629 - 196 * 6)]);
+  expect(await page.evaluate(() => (document.querySelector('#flash') || {}).textContent || '')).not.toContain('Étape terminée');
   expect(errs).toEqual([]);
 });

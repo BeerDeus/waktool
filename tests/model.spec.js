@@ -114,26 +114,27 @@ test('objectif : ressources dans la même zone = un seul spot (Croton + Edelweis
   expect(r.travels).toBe(1);
 });
 
-test('objectif : pousse des plants (attente à l’arrivée, plafond de plants) et graines sur chaque plant', async ({ page }) => {
+test('objectif : pousse des plants (attente à l’arrivée, plafond de plants, deux plantes qui s’alternent)', async ({ page }) => {
   const m = await mod(page, 'model');
   const r = await m.evaluate(async M => {
     await M.loadRecipes('herboriste');
-    const j = M.getJob('herboriste'), R = j.resources.find(x => x.name === 'Croton'), q = M.qtyStats(j).avg;
-    const base = M.goalPlan(j, 64, 0, 70, {}, { travel: 180 });
-    const few = M.goalPlan(j, 64, 0, 70, {}, { travel: 180, field: { wild: 10, cap: 30 } });
+    const j = M.getJob('herboriste'), R = n => j.resources.find(x => x.name === n), q = M.qtyStats(j).avg;
+    const fd = M.FIELD_DEF;
     return {
-      idleDefault: M.spotIdle(j, [R], 64, q), idleFew: M.spotIdle(j, [R], 64, q, { ...M.FIELD_DEF, wild: 10, cap: 30 }),
-      bound: M.plantCycle(j, R, 64, q, { ...M.FIELD_DEF, cap: 5 }).growBound, free: M.plantCycle(j, R, 64, q).growBound,
-      seeds: M.plantCycle(j, R, 64, q).seedActs, slower: few.time > base.time, idlePlan: few.idle > 0,
+      defaults: [fd.wild, fd.cap, fd.grow, fd.allSeeds],
+      idle20: M.spotIdle(j, [R('Croton')], 64, q), idle1: M.spotIdle(j, [R('Croton')], 64, q, { ...fd, grow: 60 }),
+      idlePair: M.spotIdle(j, [R('Croton'), R('Edelweiss')], 65, q),
+      bound: M.plantCycle(j, R('Croton'), 64, q).growBound, free: M.plantCycle(j, R('Croton'), 64, q, { ...fd, cap: 500 }).growBound,
+      seeds: M.plantCycle(j, R('Croton'), 64, q).seedActs, plants: M.plantCycle(j, R('Croton'), 64, q).plants,
     };
   });
-  expect(r.idleDefault).toBe(0); // 40 sauvages + ~86 plantations : les premiers plants ont poussé avant la fin
-  expect(r.idleFew).toBeGreaterThan(0);
-  expect(r.bound).toBe(true); // 5 plants seulement : on attend la pousse
+  expect(r.defaults).toEqual([20, 100, 1200, false]); // valeurs mesurées dans les journaux
+  expect(r.idle20).toBeGreaterThan(600); // 20 min de pousse : on attend en arrivant sur un spot à une seule plante
+  expect(r.idle1).toBe(0);
+  expect(r.idlePair).toBeLessThan(r.idle20); // deux plantes au même endroit : moins d'attente
+  expect(r.bound).toBe(true); // 100 plants, 20 min : la pousse freine
   expect(r.free).toBe(false);
-  expect(r.seeds).toBe(1);
-  expect(r.slower).toBe(true);
-  expect(r.idlePlan).toBe(true);
+  expect(r.seeds).toBeCloseTo(r.plants / 2, 0); // Récolter juste les graines nécessaires (q ≈ 2)
 });
 
 test('météo (données du jeu) : chance de plantation 70 % / 56 % et temps de pousse selon la plante', async ({ page }) => {

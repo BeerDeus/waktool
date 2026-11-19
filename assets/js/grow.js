@@ -1,9 +1,9 @@
 // Waktool — menu ☰ (en-tête) : chrono de pousse. Départ = dernière plantation réussie lue dans le journal du chat
 // (ou maintenant), puis « stade 2 » / « stade 3 » cliqués quand la plante change en jeu. Le temps mesuré peut devenir
 // le temps de pousse utilisé par l'assistant d'objectif.
-import { $, changed, esc, jget, store } from './util.js?v=0cd23a3a';
-import { HARVEST, weatherOk } from './model.js?v=0cd23a3a';
-import { goal, setGoal, refreshObjectif } from './goal.js?v=0cd23a3a';
+import { $, changed, esc, jget, store } from './util.js?v=94ebe13e';
+import { HARVEST, weatherOk } from './model.js?v=94ebe13e';
+import { goal, setGoal, refreshObjectif } from './goal.js?v=94ebe13e';
 
 const RES_BY_SEED = {};
 HARVEST.forEach(j => j.resources.forEach(r => [...(r.seed || []), r.plantItem].forEach(it => { if (it && it.name) RES_BY_SEED[it.name] = { j, r }; })));
@@ -45,8 +45,8 @@ function html() {
     const el = now - r.start;
     body = `<p class="grow-clock"><b id="grow-t">${mmss(el)}</b><small>${r.res ? esc(r.res) : 'plante'} · ${r.w === 'bad' ? '✗ mauvaise météo' : '✓ bonne météo'} · départ ${hhmm(r.start)}${r.src === 'journal' ? ' (journal)' : ''}</small></p>
       <div class="grow-btns">
-        ${r.s2 ? `<span class="pos">Stade 2 : ${mmss(r.s2)}</span>` : '<button type="button" class="gbtn small" data-grow="s2">Stade 2 atteint (couper)</button>'}
-        <button type="button" class="gbtn small" data-grow="s3">Stade 3 atteint (graines)</button>
+        ${r.s2 ? `<span class="pos">Stade 2 : ${mmss(r.s2)}</span>` : '<button type="button" class="gbtn small" data-grow="s2">Stade 2 : Couper possible</button>'}
+        <button type="button" class="gbtn small" data-grow="s3">Stade 3 : Récolter possible</button>
       </div>
       <button type="button" class="lnk" data-grow="cancel">Annuler</button>`;
   }
