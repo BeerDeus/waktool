@@ -233,3 +233,23 @@ test('objectif : encart du niveau en cours, barre qui avance à chaque XP et rep
   await expect.poll(w, { timeout: 5000 }).toBeLessThan(0.2); // repartie de zéro
   expect(errs).toEqual([]);
 });
+
+test('objectif : l’étape en cours reste verrouillée (pas de faux « Étape terminée » quand le plan se réoptimise)', async ({ page }) => {
+  const errs = trackErrors(page);
+  await seed(page, { 'lvl.herboriste': '57', 'xp.herboriste': '0', 'target.herboriste': '60', 'bonus.global': { region: 30 },
+    goal: { job: 'herboriste', plant: true, craft: true, travel: 0, alert: 'banner' } });
+  await page.goto('/?lk#objectif');
+  await feed(page, [xp('10:00:00', 186, 8439)], true);
+  await expect.poll(async () => (await guide(page)).kind).toBe('c');
+  const k0 = (await guide(page)).key;
+  // le sac change beaucoup (correction manuelle) : sans verrou, le meilleur plan pourrait changer d'étape
+  await page.evaluate(() => { localStorage.setItem('waktool.stock', JSON.stringify({ t: Date.now(), items: { 'Fleur de Croton': 5000 } })); window.waktool.applyState({}); });
+  await feed(page, Array.from({ length: 5 }, (_, i) => xp('10:01:0' + i, 186, 8439 - 186 * (i + 1))));
+  expect((await guide(page)).key).toBe(k0);
+  await expect(page.locator('#flash')).toHaveCount(0);
+  // ↻ Recalculer : plan neuf, sans alerte
+  await page.click('[data-g="replan"]');
+  await feed(page, [xp('10:02:00', 186, 8439 - 186 * 6)]);
+  await expect(page.locator('#flash')).toHaveCount(0);
+  expect(errs).toEqual([]);
+});

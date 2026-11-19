@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=640a266f';
-import { D, icon, jget, norm, sj, store } from './util.js?v=640a266f';
+import { st } from './state.js?v=30e09915';
+import { D, icon, jget, norm, sj, store } from './util.js?v=30e09915';
 
-import { job, renderPage } from './main.js?v=640a266f';
+import { job, renderPage } from './main.js?v=30e09915';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -390,7 +390,9 @@ const switchCost = (prev, cur, travel) => travel * hops(prev, cur) + cur.reduce(
 // ressource pour un gain minime. Une étape « craft » = aller récolter chaque ingrédient (un trajet par ingrédient).
 // Le stock en sac sert d'abord (il est consommé au fil du plan). En plantation, chaque nouveau spot coûte aussi
 // l'attente de la première pousse (voir spotIdle).
-function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, travel = 180, field = FIELD_DEF } = {}) {
+// force = { key, until } : étape en cours imposée jusqu'au niveau `until` (si elle reste possible), pour ne pas changer
+// de cible en plein milieu dès qu'une autre option devient un peu meilleure
+function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, travel = 180, field = FIELD_DEF, force = null } = {}) {
   const data = craft ? RD[j.key] : null, q = qtyStats(j).avg || 1, fd = { ...FIELD_DEF, ...field };
   const withIdle = (groups, L) => { if (plant) groups.forEach(g => { g.idle = spotIdle(j, g.rs, L, q, fd); }); return groups; };
   const needOf = L => Math.max(0, XP.need(L) - (L === from ? x0 : 0));
@@ -407,6 +409,7 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
       const o = craftOption(j, rec, L, q, plant, need, L === from ? stock : {}, fd);
       if (o) opts.set(o.key, { t: o.t, groups: withIdle(spotGroups(o.ing.filter(g => g.qty * o.N > g.have).map(g => g.rr)), L) });
     }
+    if (force && L < force.until && opts.has(force.key)) { const o = opts.get(force.key); opts.clear(); opts.set(force.key, o); }
     lv.push(opts);
   }
   // 2) programmation dynamique : rester sur la même option ne coûte pas de trajet, changer coûte un trajet

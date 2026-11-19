@@ -154,3 +154,18 @@ test('météo (données du jeu) : chance de plantation 70 % / 56 % et temps de p
   expect(r.sun[2]).toBe(false); expect(r.sun[3]).toBeCloseTo(0.56);
   expect(r.grow).toEqual([300, 600]);
 });
+
+test('objectif : étape imposée (verrou) jusqu’à son niveau de fin, puis plan libre', async ({ page }) => {
+  const m = await mod(page, 'model');
+  const r = await m.evaluate(async M => {
+    await M.loadRecipes('herboriste');
+    const j = M.getJob('herboriste');
+    const free = M.goalPlan(j, 57, 0, 64, {}, { travel: 180 });
+    const forced = M.goalPlan(j, 57, 0, 64, {}, { travel: 180, force: { key: 'g:Roseau', until: 59 } });
+    return { free: free.steps[0].key, f0: forced.steps[0].key, f0to: forced.steps[0].to, next: forced.steps[1] && forced.steps[1].key };
+  });
+  expect(r.free).not.toBe('g:Roseau');
+  expect(r.f0).toBe('g:Roseau');
+  expect(r.f0to).toBe(59);
+  expect(r.next).toBeTruthy();
+});

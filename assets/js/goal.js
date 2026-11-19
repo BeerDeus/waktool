@@ -1,11 +1,11 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=640a266f';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=640a266f';
-import { RAIN, weatherOk, bg, HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=640a266f';
-import { renderTabs } from './main.js?v=640a266f';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=640a266f';
-import { growEvent } from './grow.js?v=640a266f';
-import { flash, initAudio } from './alert.js?v=640a266f';
+import { st } from './state.js?v=30e09915';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=30e09915';
+import { RAIN, weatherOk, bg, HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=30e09915';
+import { renderTabs } from './main.js?v=30e09915';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=30e09915';
+import { growEvent } from './grow.js?v=30e09915';
+import { flash, initAudio } from './alert.js?v=30e09915';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, allSeeds: true, t: 0 };
@@ -38,10 +38,20 @@ function ctx() {
   const to = targetOf(j, L), x = L === null ? 0 : Math.min(xpOf(j.key), XP.need(L) - 1);
   const plant = g.plant && PLANTABLE.includes(j.key);
   const craft = g.craft && (RD[j.key] || needRecipes(j.key));
-  let plan = null;
-  if (L !== null && to > L && (!g.craft || craft)) plan = goalPlan(j, L, x, to, stock(), { plant, craft: !!g.craft, travel: Math.max(0, +g.travel || 0) * 60,
-    field: { wild: Math.max(0, +g.wild || 0), cap: Math.max(1, +g.cap || 1), grow: Math.max(0, +g.grow || 0) * 60, growBad: Math.max(0, +g.growBad || 0) * 60, allSeeds: g.allSeeds !== false } });
-  return { g, j, L, x, to, plant, plan, loading: g.craft && !craft };
+  let plan = null, lock = null;
+  if (L !== null && to > L && (!g.craft || craft)) {
+    // étape en cours verrouillée jusqu'à son niveau de fin (même métier, même objectif, mêmes options)
+    lock = jget('goal.lock', null);
+    if (lock && (lock.job !== j.key || lock.target !== to || lock.plant !== plant || lock.craft !== !!g.craft || L >= lock.until)) lock = null;
+    plan = goalPlan(j, L, x, to, stock(), { plant, craft: !!g.craft, travel: Math.max(0, +g.travel || 0) * 60, force: lock,
+      field: { wild: Math.max(0, +g.wild || 0), cap: Math.max(1, +g.cap || 1), grow: Math.max(0, +g.grow || 0) * 60, growBad: Math.max(0, +g.growBad || 0) * 60, allSeeds: g.allSeeds !== false } });
+    const s0 = plan.steps[0];
+    if (s0 && (!lock || lock.key !== s0.key)) {
+      lock = { job: j.key, target: to, plant, craft: !!g.craft, key: s0.key, until: s0.to };
+      store.set('goal.lock', JSON.stringify(lock));
+    }
+  }
+  return { g, j, L, x, to, plant, plan, lock, loading: g.craft && !craft };
 }
 
 function guide(c) {
@@ -93,7 +103,7 @@ function goalEvent(ev, mode) {
 // alertes aux changements d'étape : comparées à l'état précédent (calculé sans alerte au chargement)
 let prevSig = null;
 function signature(c, gd) {
-  return { job: c.j.key, done: gd.kind === 'done', key: gd.key || gd.kind, ready: !!gd.ready, ok: gd.ing ? gd.ing.filter(o => o.ok).map(o => o.item.name) : [] };
+  return { job: c.j.key, L: c.L, done: gd.kind === 'done', key: gd.key || gd.kind, ready: !!gd.ready, ok: gd.ing ? gd.ing.filter(o => o.ok).map(o => o.item.name) : [] };
 }
 function checkAlerts(silent) {
   const c = ctx(), gd = guide(c), sig = signature(c, gd), p = prevSig;
@@ -101,7 +111,11 @@ function checkAlerts(silent) {
   if (silent || !p || p.job !== sig.job) return;
   if (sig.done && !p.done) { flash(`Objectif atteint 🎉`, `${c.j.label} niveau ${c.L}`, { big: true }); return; }
   if (sig.done) return;
-  if (sig.key !== p.key) { flash('Étape terminée ✓', 'Ensuite : ' + actionText(gd).title); return; }
+  if (sig.key !== p.key) {
+    // vraie fin d'étape = niveau de fin atteint ; sinon simple recalcul (réglage, sac corrigé…) : pas d'alerte
+    if (sig.L > p.L) flash('Étape terminée ✓', 'Ensuite : ' + actionText(gd).title);
+    return;
+  }
   if (gd.kind !== 'c') return;
   if (sig.ready && !p.ready) { flash(`Crafte ${fmt(gd.N)} × ${gd.s.rec.res.item.name}`, 'Tu as tous les ingrédients.'); return; }
   const fresh = sig.ok.filter(n => !p.ok.includes(n));
@@ -271,7 +285,8 @@ function stepsHtml(c) {
     return `<li class="${i ? '' : 'cur'}"><span class="lv">${s.from}–${s.to}</span>${icon(p, 'ico')}<span class="what"><b>${fmt(Math.ceil(s.crafts - 1e-6))} × ${esc(p.name)}</b>
       <small>${s.ing.map(o => `${fmt(o.qty * Math.ceil(s.crafts - 1e-6))} ${esc(o.item.name)}${o.fromStock >= 1 ? ` <em>(${fmt(o.fromStock)} en sac)</em>` : ''}`).join(' · ')}${s.spots > 1 ? ` · ${s.spots} spots` : ''}</small>${s.groups.length === 1 ? (z => zonesTxt(z.zs, 2) + alsoTxt(z, false))(stepZones(c.plan.steps, i)) : s.groups.map(g => zonesTxt(stepZones(c.plan.steps, i, g).zs, 1)).join(' ')}</span><span class="t">~${fmtDur(s.t)}</span></li>`;
   }).join('');
-  return `<section class="panel"><h4>Le plan <small>· recalculé à chaque action</small></h4><ol class="steps">${rows}</ol></section>`;
+  return `<section class="panel"><div class="panel-head"><h4>Le plan <small>· l’étape en cours reste la même jusqu’au niveau ${c.lock ? c.lock.until : c.plan.steps[0].to}, la suite est recalculée à chaque action</small></h4>
+    <button type="button" class="lnk" data-g="replan" title="Recalculer tout le plan depuis ta situation actuelle (peut changer l’étape en cours)">↻ Recalculer</button></div><ol class="steps">${rows}</ol></section>`;
 }
 
 // objets utiles au plan (ressources, graines, produits) puis le reste du sac
@@ -335,6 +350,7 @@ page.addEventListener('click', async e => {
     const d = $('#page-objectif details.more'); if (d) d.open = true;
     $('#journal').scrollIntoView({ behavior: 'smooth' });
   }
+  if (e.target.closest('[data-g="replan"]')) { store.set('goal.lock', ''); prevSig = null; renderObjectif(); return; }
   if (e.target.closest('[data-g="restart"]')) {
     const c = ctx();
     if (c.L !== null) { setGoal({ job: c.j.key, start: { to: c.to, x: XP.total(c.L) } }); renderObjectif(); }
@@ -355,6 +371,7 @@ page.addEventListener('change', e => {
   const el = e.target.closest('[data-g]');
   if (!el) return;
   const k = el.dataset.g, j = goalJob();
+  if (k !== 'alert') store.set('goal.lock', ''); // réglage changé : nouveau plan complet
   if (k === 'job') setGoal({ job: el.value });
   else if (k === 'plant' || k === 'craft') setGoal({ [k]: el.checked });
   else if (k === 'travel') setGoal({ travel: Math.max(0, Math.min(60, +el.value || 0)) });
