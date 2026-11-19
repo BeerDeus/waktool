@@ -169,3 +169,18 @@ test('objectif : étape imposée (verrou) jusqu’à son niveau de fin, puis pla
   expect(r.f0to).toBe(59);
   expect(r.next).toBeTruthy();
 });
+
+test('céréales : le grain sert de graine (Avoine replantable, Farine Fragile proposée)', async ({ page }) => {
+  const m = await mod(page, 'model');
+  const r = await m.evaluate(async M => {
+    await M.loadRecipes('paysan');
+    const j = M.getJob('paysan'), av = j.resources.find(x => x.name === 'Avoine');
+    const p = M.goalPlan(j, 36, 4739, 50, {}, { travel: 180 });
+    const slow = M.goalPlan(j, 36, 4739, 50, {}, { travel: 180, eff: 0.5 });
+    return { seed: M.seedOf(av) && M.seedOf(av).name, first: p.steps[0].kind === 'c' ? p.steps[0].rec.res.item.name : p.steps[0].r.name,
+      slower: slow.farm > p.farm * 1.9 };
+  });
+  expect(r.seed).toBe("Grain d'Avoine");
+  expect(r.first).toBe('Farine Fragile');
+  expect(r.slower).toBe(true);
+});

@@ -1,8 +1,8 @@
 // Waktool — module model
-import { st } from './state.js?v=30e09915';
-import { D, icon, jget, norm, sj, store } from './util.js?v=30e09915';
+import { st } from './state.js?v=0cd23a3a';
+import { D, icon, jget, norm, sj, store } from './util.js?v=0cd23a3a';
 
-import { job, renderPage } from './main.js?v=30e09915';
+import { job, renderPage } from './main.js?v=0cd23a3a';
 // ================================================================ modèle XP
 // XP pour passer de n à n+1 : 150n + 75 (total pour atteindre t : 75t²).
 // XP de base d'une action : 150 (rare : ×10 Herboriste, ×4 Trappeur), quel que soit le niveau de la ressource.
@@ -72,6 +72,12 @@ const priceInput = (it, cls = '') => {
 
 // ================================================================ métiers
 D.jobs.forEach(j => { j.type = 'harvest'; });
+// céréales (Blé, Orge, Avoine, Seigle, Riz, Maïs…) : pas de « graine » dans les données, c'est le grain qui se replante
+D.jobs.forEach(j => j.resources.forEach(r => {
+  if (!(r.seed || []).length) { const g = (r.normal || []).find(i => i && /^Grain /.test(i.name)); if (g) r.plantItem = g; }
+}));
+// objet planté pour une ressource (graine, spores, mucilage… ou grain des céréales)
+const seedOf = r => (r && ((r.seed || [])[0] || r.plantItem)) || null;
 const CRAFTS = (window.WAKFU_CRAFTS || []).map(c => ({ ...c, type: 'craft' }));
 const ALL = [...D.jobs, ...CRAFTS];
 const HARVEST = D.jobs;
@@ -126,7 +132,7 @@ function bestField(j, L, qAvg) {
   if (!PLANTABLE.includes(j.key)) return null;
   let best = null;
   for (const r of j.resources) {
-    if (r.level > L || !(r.seed || []).length || !XP.mult(L - r.level)) continue;
+    if (r.level > L || !seedOf(r) || !XP.mult(L - r.level)) continue;
     const c = fieldCycle(j, r, L, qAvg);
     if (!best || c.xp / c.time > best.xp / best.time) best = c;
   }
@@ -323,7 +329,7 @@ function spotIdle(j, rs, L, qAvg, fd = FIELD_DEF) {
   let busy = 0, grow = 0;
   for (const r of rs) {
     grow = Math.max(grow, growOf(r, fd));
-    if (!PLANTABLE.includes(j.key) || !(r.seed || []).length) return 0;
+    if (!PLANTABLE.includes(j.key) || !seedOf(r)) return 0;
     const d = dur(j.key, Math.max(0, L - r.level), r);
     const n = Math.min(fd.wild * qAvg, Math.max(0, fd.cap - fd.wild) / plantChance(r)); // tentatives de plantation
     busy += (n + fd.wild) * d;
@@ -334,7 +340,7 @@ function spotIdle(j, rs, L, qAvg, fd = FIELD_DEF) {
 // plant = on replante les graines dans la nature (voir plantCycle), sinon récolte seule.
 function gatherUnit(j, r, L, qAvg, plant, fd = FIELD_DEF) {
   const diff = Math.max(0, L - r.level);
-  if (plant && PLANTABLE.includes(j.key) && (r.seed || []).length) {
+  if (plant && PLANTABLE.includes(j.key) && seedOf(r)) {
     const f = plantCycle(j, r, L, qAvg, fd);
     return { xp: f.xp / qAvg, t: f.time / qAvg, plants: f.plants / qAvg, cuts: 1 / qAvg, seedActs: f.seedActs / qAvg, growBound: f.growBound };
   }
@@ -392,7 +398,10 @@ const switchCost = (prev, cur, travel) => travel * hops(prev, cur) + cur.reduce(
 // l'attente de la première pousse (voir spotIdle).
 // force = { key, until } : étape en cours imposée jusqu'au niveau `until` (si elle reste possible), pour ne pas changer
 // de cible en plein milieu dès qu'une autre option devient un peu meilleure
-function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, travel = 180, field = FIELD_DEF, force = null } = {}) {
+// eff = rythme réel / rythme du modèle (déplacements entre plants, pauses courtes…), calé sur le journal : les temps de récolte
+// sont divisés par eff, ce qui donne des durées réalistes et le bon poids aux trajets
+function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, travel = 180, field = FIELD_DEF, force = null, eff = 1 } = {}) {
+  eff = Math.max(0.1, Math.min(1, +eff || 1));
   const data = craft ? RD[j.key] : null, q = qtyStats(j).avg || 1, fd = { ...FIELD_DEF, ...field };
   const withIdle = (groups, L) => { if (plant) groups.forEach(g => { g.idle = spotIdle(j, g.rs, L, q, fd); }); return groups; };
   const needOf = L => Math.max(0, XP.need(L) - (L === from ? x0 : 0));
@@ -403,11 +412,11 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
     for (const r of j.resources) {
       if (r.level > L) continue;
       const u = gatherUnit(j, r, L, q, plant, fd);
-      if (u.xp) opts.set('g:' + r.name, { t: need / u.xp * u.t, groups: withIdle(spotGroups([r]), L) });
+      if (u.xp) opts.set('g:' + r.name, { t: need / u.xp * u.t / eff, groups: withIdle(spotGroups([r]), L) });
     }
     if (data) for (const rec of data.recipes) {
       const o = craftOption(j, rec, L, q, plant, need, L === from ? stock : {}, fd);
-      if (o) opts.set(o.key, { t: o.t, groups: withIdle(spotGroups(o.ing.filter(g => g.qty * o.N > g.have).map(g => g.rr)), L) });
+      if (o) opts.set(o.key, { t: o.t / eff, groups: withIdle(spotGroups(o.ing.filter(g => g.qty * o.N > g.have).map(g => g.rr)), L) });
     }
     if (force && L < force.until && opts.has(force.key)) { const o = opts.get(force.key); opts.clear(); opts.set(force.key, o); }
     lv.push(opts);
@@ -447,6 +456,7 @@ function goalPlan(j, from, x0, to, stock = {}, { plant = true, craft = true, tra
       const r = j.resources.find(x => 'g:' + x.name === key), u = gatherUnit(j, r, L, q, plant, fd);
       best = { kind: 'g', key, r, u, n: need / u.xp, t: need / u.xp * u.t };
     } else best = craftOption(j, data.recipes.find(x => 'c:' + x.id === key), L, q, plant, need, S, fd);
+    best.t /= eff;
     time += best.t;
     let st = steps[steps.length - 1];
     if (!st || st.key !== best.key) {
@@ -538,7 +548,7 @@ function profitRows(j, opts) {
   return rows;
 }
 
-export { RAIN, weatherOk, growOf, progAt, touchProg, FIELD_DEF, plantCycle, spotIdle, resZones, spotGroups, gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
+export { seedOf, RAIN, weatherOk, growOf, progAt, touchProg, FIELD_DEF, plantCycle, spotIdle, resZones, spotGroups, gatherUnit, craftOption, goalPlan, CRAFT_T, PHIST, priceAge, priceTrend, priceHistoryText, PLANTABLE, bonusPlant, plantChance, fieldCycle, bestField, XP, PRICES, price, setPrices, priceInput, CRAFTS, ALL, HARVEST, getJob, lvlKey, levelOf, xpOf, pins, setPins, G_DEF, J_DEF, REGION, bg, bjob, bonusXp, speedMult, climate, climK, dur, activeTool, qtyParts, qtyStats, bestAt, addXp, RARITY, RD, RP, loadRecipes, needRecipes, srcLabel, prodLabel, resOfItem, allItemsP, allItems, addTo, craftCycle, harvestPlan, craftPlan, profitRows };
 
 // ================================================================ zones (« Où aller ? »)
 // Les zones viennent du texte MethodWakfu (« Région - zone1, zone2 & zone3 »), hétérogène : on normalise.

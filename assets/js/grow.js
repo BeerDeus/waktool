@@ -1,12 +1,12 @@
 // Waktool — menu ☰ (en-tête) : chrono de pousse. Départ = dernière plantation réussie lue dans le journal du chat
 // (ou maintenant), puis « stade 2 » / « stade 3 » cliqués quand la plante change en jeu. Le temps mesuré peut devenir
 // le temps de pousse utilisé par l'assistant d'objectif.
-import { $, changed, esc, jget, store } from './util.js?v=30e09915';
-import { HARVEST, weatherOk } from './model.js?v=30e09915';
-import { goal, setGoal, refreshObjectif } from './goal.js?v=30e09915';
+import { $, changed, esc, jget, store } from './util.js?v=0cd23a3a';
+import { HARVEST, weatherOk } from './model.js?v=0cd23a3a';
+import { goal, setGoal, refreshObjectif } from './goal.js?v=0cd23a3a';
 
 const RES_BY_SEED = {};
-HARVEST.forEach(j => j.resources.forEach(r => (r.seed || []).forEach(it => { if (it && it.name) RES_BY_SEED[it.name] = { j, r }; })));
+HARVEST.forEach(j => j.resources.forEach(r => [...(r.seed || []), r.plantItem].forEach(it => { if (it && it.name) RES_BY_SEED[it.name] = { j, r }; })));
 
 const run = () => jget('grow.run', null); // { start, src: 'journal'|'manuel', seed, res, lvl, s2 }
 const setRun = o => store.set('grow.run', JSON.stringify(o));

@@ -1,11 +1,11 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=30e09915';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=30e09915';
-import { RAIN, weatherOk, bg, HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=30e09915';
-import { renderTabs } from './main.js?v=30e09915';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=30e09915';
-import { growEvent } from './grow.js?v=30e09915';
-import { flash, initAudio } from './alert.js?v=30e09915';
+import { st } from './state.js?v=0cd23a3a';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=0cd23a3a';
+import { seedOf, RAIN, weatherOk, bg, HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=0cd23a3a';
+import { renderTabs } from './main.js?v=0cd23a3a';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=0cd23a3a';
+import { growEvent } from './grow.js?v=0cd23a3a';
+import { flash, initAudio } from './alert.js?v=0cd23a3a';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, allSeeds: true, t: 0 };
@@ -29,10 +29,12 @@ const goalJob = () => {
 };
 const autoTarget = L => Math.min(200, (Math.floor((L ?? 0) / 10) + 1) * 10);
 const targetOf = (j, L) => +(store.get('target.' + j.key) || 0) || autoTarget(L);
-const mainItem = r => (r.normal || [])[0] || { name: r.name, icon: r.appearance };
-const seedItem = r => (r.seed || [])[0];
+// produit principal : pas le grain des céréales (il sert à replanter), ex. Paille d'Avoine plutôt que Grain d'Avoine
+const mainItem = r => (r.normal || []).find(i => i !== r.plantItem) || (r.normal || [])[0] || { name: r.name, icon: r.appearance };
+const seedItem = r => seedOf(r);
 
 // ================================================================ calcul : plan + prochaine action
+const LOCK_V = 2; // à changer quand le modèle change : les anciens verrous sont abandonnés
 function ctx() {
   const g = goal(), j = goalJob(), L = levelOf(j.key);
   const to = targetOf(j, L), x = L === null ? 0 : Math.min(xpOf(j.key), XP.need(L) - 1);
@@ -42,12 +44,12 @@ function ctx() {
   if (L !== null && to > L && (!g.craft || craft)) {
     // étape en cours verrouillée jusqu'à son niveau de fin (même métier, même objectif, mêmes options)
     lock = jget('goal.lock', null);
-    if (lock && (lock.job !== j.key || lock.target !== to || lock.plant !== plant || lock.craft !== !!g.craft || L >= lock.until)) lock = null;
-    plan = goalPlan(j, L, x, to, stock(), { plant, craft: !!g.craft, travel: Math.max(0, +g.travel || 0) * 60, force: lock,
+    if (lock && (lock.v !== LOCK_V || lock.job !== j.key || lock.target !== to || lock.plant !== plant || lock.craft !== !!g.craft || L >= lock.until)) lock = null;
+    plan = goalPlan(j, L, x, to, stock(), { plant, craft: !!g.craft, travel: Math.max(0, +g.travel || 0) * 60, force: lock, eff: effOf(j.key),
       field: { wild: Math.max(0, +g.wild || 0), cap: Math.max(1, +g.cap || 1), grow: Math.max(0, +g.grow || 0) * 60, growBad: Math.max(0, +g.growBad || 0) * 60, allSeeds: g.allSeeds !== false } });
     const s0 = plan.steps[0];
     if (s0 && (!lock || lock.key !== s0.key)) {
-      lock = { job: j.key, target: to, plant, craft: !!g.craft, key: s0.key, until: s0.to };
+      lock = { v: LOCK_V, job: j.key, target: to, plant, craft: !!g.craft, key: s0.key, until: s0.to };
       store.set('goal.lock', JSON.stringify(lock));
     }
   }
@@ -122,7 +124,28 @@ function checkAlerts(silent) {
   if (fresh.length && gd.next) flash(`Assez de ${fresh.join(' et ')} ✓`, `Passe à ${gd.next.item.name} : encore ${fmt(gd.next.left)} pour crafter ${fmt(gd.N)} ${gd.s.rec.res.item.name}`);
 }
 // après un lot de lignes du journal
+// rythme réel : XP / temps d'activité (les pauses de plus d'une minute ne comptent pas), sur les 15 dernières minutes
+function activeRate(k) {
+  const now = Date.now(), ev = recent.filter(e => e.job === k && now - e.at < 15 * 60000);
+  if (ev.length < 10) return null;
+  let t = 0, xp = 0;
+  for (let i = 1; i < ev.length; i++) { t += Math.min(60000, ev[i].at - ev[i - 1].at); xp += ev[i].gain; }
+  return t >= 60000 ? xp / t * 3600e3 : null;
+}
+// calage du modèle sur ton rythme réel (par métier), au plus une fois par minute, lissé
+const effOf = k => +(store.get('goal.eff.' + k) || 1);
+let effAt = 0;
+function calibrate() {
+  if (Date.now() - effAt < 60000) return;
+  const c = ctx(), s = c.plan && c.plan.steps[0], real = activeRate(c.j.key);
+  if (!s || !real || !s.t) return;
+  const model = s.xp / (s.t * effOf(c.j.key)) * 3600; // XP/h du modèle sans calage
+  const k = Math.max(0.2, Math.min(1, real / model));
+  store.set('goal.eff.' + c.j.key, (0.7 * effOf(c.j.key) + 0.3 * k).toFixed(3));
+  effAt = Date.now();
+}
 function goalAfterFeed(first) {
+  if (!first) calibrate();
   checkAlerts(first);
   refreshObjectif();
 }
@@ -266,6 +289,7 @@ function heroHtml(c, gd) {
         <label class="chk"><input type="checkbox" data-g="craft" ${c.g.craft ? 'checked' : ''}> Crafter quand ça accélère (fils…)</label>
         <label class="chk" title="Temps moyen pour aller d’un spot de récolte à un autre : plus il est long, moins le plan te fait changer de cible">Trajet entre 2 spots <input type="number" min="0" max="60" data-g="travel" value="${+c.g.travel || 0}"> min</label>
         <label class="chk">XP actuelle <input type="number" min="0" data-g="xp" value="${c.x}"></label>
+        <span class="chk" title="Rapport entre ton rythme réel (journal, pauses exclues) et le rythme théorique (actions sans déplacement). Sert aux durées et au poids des trajets.">Rythme réel : ${Math.round(effOf(j.key) * 100)} % du théorique${effOf(j.key) < 1 ? ' <button type="button" class="lnk" data-g="effreset">réinitialiser</button>' : ' (se cale sur ton journal)'}</span>
         <label class="chk">Alertes <select data-g="alert">${[['edge', 'Barre en bas (discrète)'], ['banner', 'Bandeau en haut'], ['full', 'Plein écran']].map(([v, l]) => `<option value="${v}" ${c.g.alert === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <button type="button" class="lnk" data-g="test-alert">Tester l’alerte</button>
       </details>
@@ -350,6 +374,7 @@ page.addEventListener('click', async e => {
     const d = $('#page-objectif details.more'); if (d) d.open = true;
     $('#journal').scrollIntoView({ behavior: 'smooth' });
   }
+  if (e.target.closest('[data-g="effreset"]')) { store.set('goal.eff.' + goalJob().key, ''); renderObjectif(); return; }
   if (e.target.closest('[data-g="replan"]')) { store.set('goal.lock', ''); prevSig = null; renderObjectif(); return; }
   if (e.target.closest('[data-g="restart"]')) {
     const c = ctx();
