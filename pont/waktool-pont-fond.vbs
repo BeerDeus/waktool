@@ -16,6 +16,13 @@ flagDir = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Waktool"
 flag = flagDir & "\fond-demarrage.txt"
 auto = (WScript.Arguments.Count > 0)   ' lancé par le raccourci de démarrage : aucun message
 
+' le lanceur ne doit pas être dans le dossier Démarrage : il y retire waktool-pont.cmd (ancien lancement avec fenêtre)
+If LCase(dir) = LCase(startup) Then
+  MsgBox "Ne mets pas ce fichier dans le dossier Démarrage de Windows." & vbCrLf & vbCrLf & _
+    "Mets waktool-pont-fond.vbs, waktool-pont-arreter.cmd et une copie de waktool-pont.cmd dans un dossier à toi " & _
+    "(ex. Documents\Waktool), puis double-clique le .vbs : il s'ajoutera lui-même au démarrage.", vbExclamation, "Waktool"
+  WScript.Quit 1
+End If
 If Not fso.FileExists(pont) Then
   MsgBox "waktool-pont.cmd est introuvable dans :" & vbCrLf & dir & vbCrLf & vbCrLf & _
     "Mets waktool-pont-fond.vbs et waktool-pont.cmd dans le même dossier.", vbExclamation, "Waktool"
