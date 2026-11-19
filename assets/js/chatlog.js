@@ -5,13 +5,13 @@
 //   - le pont local (waktool-pont.cmd, PowerShell) qui sert le journal sur http://127.0.0.1:47811 ;
 //     Chrome interdit en effet aux sites d'ouvrir un fichier du dossier AppData (liste de blocage de l'API File System Access) ;
 //   - un fichier choisi à la main (copie du journal hors d'AppData, ou autre navigateur).
-import { st } from './state.js?v=66a69829';
-import { $, changed, esc, fmt, norm, sj, store } from './util.js?v=66a69829';
-import { ALL, HARVEST, XP, getJob, levelOf, lvlKey, progAt, touchProg, xpOf } from './model.js?v=66a69829';
-import { job, renderTabs } from './main.js?v=66a69829';
-import { renderJobCard } from './metiers.js?v=66a69829';
-import { initAudio, beep, toast } from './alert.js?v=66a69829';
-import { bag, goalAfterFeed, goalEvent, refreshObjectif } from './goal.js?v=66a69829';
+import { st } from './state.js?v=d32f5467';
+import { $, changed, esc, fmt, norm, sj, store } from './util.js?v=d32f5467';
+import { ALL, HARVEST, XP, getJob, levelOf, lvlKey, progAt, touchProg, xpOf } from './model.js?v=d32f5467';
+import { job, renderTabs } from './main.js?v=d32f5467';
+import { renderJobCard } from './metiers.js?v=d32f5467';
+import { initAudio, beep, toast } from './alert.js?v=d32f5467';
+import { bag, goalAfterFeed, goalEvent, refreshObjectif } from './goal.js?v=d32f5467';
 
 // ================================================================ analyse d'une ligne
 const N = '([\\d\\s\\u00a0\\u202f]+)';
@@ -327,6 +327,17 @@ function chatPanelHtml() {
     <div class="panel-head"><h4>Journal du chat</h4><div class="chat-btns">${btns}</div></div>
     <p class="chat-status">${status}${ui.err ? ` · <span class="warn-txt">${esc(ui.err)}</span>` : ''}</p>
     ${setup}${sum}${old}
+    <details class="more"><summary>Faire tourner le pont sans fenêtre (arrière-plan)</summary>
+      <ol class="bridge-steps">
+        <li><div><a class="gbtn small" href="pont/waktool-pont-fond.vbs" download="waktool-pont-fond.vbs">⤓ Lanceur sans fenêtre</a>
+          <a class="gbtn small" href="pont/waktool-pont-arreter.cmd" download="waktool-pont-arreter.cmd">⤓ Arrêter le pont</a></div>
+          <span>À mettre <b>dans le même dossier</b> que <code>waktool-pont.cmd</code> (si Chrome hésite à les télécharger : <i>Conserver</i>).</span></li>
+        <li><div><b>Double-clique</b> sur <code>waktool-pont-fond.vbs</code>.</div>
+          <span>Le pont démarre caché. Il propose de se lancer ainsi à chaque démarrage de Windows (et retire l’ancien lancement avec fenêtre).</span></li>
+        <li><div>Pour l’arrêter : <code>waktool-pont-arreter.cmd</code>.</div>
+          <span>Le pont avec fenêtre (<code>waktool-pont.cmd</code> seul) marche toujours pareil, à lancer au besoin.</span></li>
+      </ol>
+    </details>
     <div class="chat-opts">
       <label class="chk"><input type="checkbox" data-chatcfg="sound" ${c.sound ? 'checked' : ''}> Son des alertes</label>
       <label class="chk"><input type="checkbox" data-chatcfg="lvlup" ${c.lvlup ? 'checked' : ''}> Message à chaque niveau</label>

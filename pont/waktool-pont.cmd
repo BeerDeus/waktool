@@ -4,7 +4,7 @@ rem Partie batch (cmd) : relance ce meme fichier avec PowerShell, integre a Wind
 title Waktool - pont du journal Wakfu
 set "WAKTOOL_PONT=%~f0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Expression ([IO.File]::ReadAllText($env:WAKTOOL_PONT))"
-if errorlevel 1 pause
+if errorlevel 1 if not "%WAKTOOL_SILENT%"=="1" pause
 exit /b
 #>
 # ============================================================================
@@ -15,9 +15,13 @@ exit /b
 # - seul le site Waktool peut les lire (controle de l'origine et de l'hote) ;
 # - rien n'est ecrit, rien n'est installe (sauf si tu acceptes le lancement au demarrage).
 # Pour l'arreter : ferme cette fenetre.
+# Mode arriere-plan (sans fenetre) : waktool-pont-fond.vbs, a placer dans le meme
+# dossier ; il l'arrete avec waktool-pont-arreter.cmd.
 # ============================================================================
 $ErrorActionPreference = 'Stop'
-$Version = 1
+$Version = 2
+$Silent = $env:WAKTOOL_SILENT -eq '1'   # lance par waktool-pont-fond.vbs : aucune question, aucune fenetre
+$PidFile = Join-Path $env:LOCALAPPDATA 'Waktool\pont.pid'
 $Port = 47811
 $Origins = @('https://wakfu.manaorbit.app', 'http://localhost:8799', 'http://127.0.0.1:8799')
 $Log = if ($env:WAKTOOL_LOG) { $env:WAKTOOL_LOG } else { Join-Path $env:APPDATA 'zaap\gamesLogs\wakfu\logs\wakfu_chat.log' }
@@ -32,7 +36,7 @@ try {
   $startup = [Environment]::GetFolderPath('Startup')
   $dest = Join-Path $startup 'waktool-pont.cmd'
   $flag = Join-Path $env:LOCALAPPDATA 'Waktool\pont-demarrage.txt'
-  if ($self -and $startup -and ($self -ne $dest) -and -not (Test-Path -LiteralPath $flag)) {
+  if (-not $Silent -and $self -and $startup -and ($self -ne $dest) -and -not (Test-Path -LiteralPath $flag)) {
     $answer = Read-Host 'Lancer le pont automatiquement au demarrage de Windows ? (o/n)'
     New-Item -ItemType Directory -Force -Path (Split-Path $flag) | Out-Null
     Set-Content -LiteralPath $flag -Value $answer
@@ -165,9 +169,14 @@ $listener = New-Object System.Net.Sockets.TcpListener ([Net.IPAddress]::Loopback
 try { $listener.Start() }
 catch {
   Say "Le port $Port est deja utilise : le pont tourne sans doute deja dans une autre fenetre." 'Yellow'
-  Start-Sleep -Seconds 6
+  if (-not $Silent) { Start-Sleep -Seconds 6 }
   exit 0
 }
+# numero du processus, pour waktool-pont-arreter.cmd (mode sans fenetre)
+try {
+  New-Item -ItemType Directory -Force -Path (Split-Path $PidFile) | Out-Null
+  Set-Content -LiteralPath $PidFile -Value $PID
+} catch { }
 Write-Host ''
 Write-Host '  Pont Waktool actif - laisse cette fenetre ouverte (tu peux la reduire).' -ForegroundColor Green
 Write-Host "  Journal : $Log"
@@ -181,4 +190,7 @@ try {
     catch { if ($_.Exception.InnerException -isnot [System.IO.IOException] -and $_.Exception -isnot [System.IO.IOException]) { Say "Erreur : $($_.Exception.Message)" 'Yellow' } }
     finally { $client.Close() }
   }
-} finally { $listener.Stop() }
+} finally {
+  $listener.Stop()
+  try { if ((Get-Content -LiteralPath $PidFile -ErrorAction Stop) -eq "$PID") { Remove-Item -LiteralPath $PidFile } } catch { }
+}

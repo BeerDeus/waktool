@@ -58,7 +58,10 @@ Alertes à l'écran (bandeau / plein écran / discrètes + bord qui pulse + son)
 Lecture de `%APPDATA%\zaap\gamesLogs\wakfu\logs\wakfu_chat.log` : Chrome bloque tout le dossier AppData pour l'API
 File System Access, d'où le **pont** `pont/waktool-pont.cmd` (batch + PowerShell, rien à installer) qui sert le fichier
 sur `http://127.0.0.1:47811/log?from=<octet>` (lignes « Information (jeu) » seulement, en-têtes `X-Next`, `X-Mod`, `X-Reset`…,
-origine et hôte contrôlés). Le fichier est en CRLF (`.gitattributes` : `-text`).
+origine et hôte contrôlés). Les fichiers de `pont/` sont en CRLF (`.gitattributes` : `-text`).
+Mode sans fenêtre (PC perso) : `pont/waktool-pont-fond.vbs` lance le même `.cmd` caché (`WAKTOOL_SILENT=1` : aucune question),
+propose un raccourci dans le dossier Démarrage ; le pont note son PID dans `%LOCALAPPDATA%\Waktool\pont.pid`,
+utilisé par `pont/waktool-pont-arreter.cmd`.
 
 ## Cache
 

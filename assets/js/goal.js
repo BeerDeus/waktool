@@ -1,11 +1,11 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=66a69829';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=66a69829';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=66a69829';
-import { renderTabs } from './main.js?v=66a69829';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=66a69829';
-import { growEvent } from './grow.js?v=66a69829';
-import { flash, initAudio } from './alert.js?v=66a69829';
+import { st } from './state.js?v=d32f5467';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=d32f5467';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=d32f5467';
+import { renderTabs } from './main.js?v=d32f5467';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=d32f5467';
+import { growEvent } from './grow.js?v=d32f5467';
+import { flash, initAudio } from './alert.js?v=d32f5467';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, weather: 'ok', allSeeds: true, t: 0 };
