@@ -215,3 +215,21 @@ test('deux PC : un journal plus ancien que la progression connue (compte) est ig
   expect(await ls(page, 'xp.herboriste')).toBe('9');
   expect(errs).toEqual([]);
 });
+
+test('objectif : encart du niveau en cours, barre qui avance à chaque XP et repart à la montée', async ({ page }) => {
+  const errs = trackErrors(page);
+  await seed(page, { 'lvl.herboriste': '65', 'xp.herboriste': '0', 'target.herboriste': '70', goal: { job: 'herboriste' } });
+  await page.goto('/?lv#objectif');
+  await feed(page, [xp('10:00:00', 196, 9825 - 2729)], true); // niv. 65 : 2 729 / 9 825
+  await expect(page.locator('.lvl-card')).toContainText('Niveau 65');
+  await expect(page.locator('.lvl-pct')).toHaveText('27 %');
+  const w = () => page.locator('.lvlbar i').evaluate(el => el.getBoundingClientRect().width / el.parentElement.getBoundingClientRect().width);
+  const w0 = await w();
+  await feed(page, [xp('10:00:03', 4000, 9825 - 6729)]);
+  await expect(page.locator('.lvl-pct')).toHaveText('68 %');
+  await expect.poll(w).toBeGreaterThan(w0 + 0.3); // la barre s'est remplie (animation)
+  await feed(page, [xp('10:00:06', 4000, 9975 - 904, 1)]); // montée : 3 096 restants, 904 de trop
+  await expect(page.locator('.lvl-card')).toContainText('Niveau 66');
+  await expect.poll(w, { timeout: 5000 }).toBeLessThan(0.2); // repartie de zéro
+  expect(errs).toEqual([]);
+});

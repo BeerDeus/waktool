@@ -609,3 +609,21 @@ body.obj-compact .side { display: none; }
 .grow-t td small { color: var(--mut); }
 .grow-w { justify-self: start; }
 .grow-w button { padding: 5px 12px; }
+
+/* encart « niveau en cours » : barre qui se remplit */
+.lvl-card { background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px 9px; display: grid; gap: 7px; }
+.lvl-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; color: var(--mut); }
+.lvl-top b { color: var(--txt); font-size: 18px; }
+.lvl-top i { font-style: normal; }
+.lvl-pct { color: var(--c) !important; font-variant-numeric: tabular-nums; }
+.lvlbar { position: relative; height: 16px; border-radius: 99px; background: var(--bg2); border: 1px solid var(--line); overflow: hidden; }
+.lvlbar i { position: relative; display: block; height: 100%; border-radius: 99px; overflow: hidden;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c) 65%, #000), var(--c) 60%, color-mix(in srgb, var(--c) 60%, #fff));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--c) 45%, transparent); transition: width .8s cubic-bezier(.2, .8, .2, 1); }
+.lvlbar i::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / .45), transparent); }
+.lvlbar.gain i::after { animation: lvl-sheen 1s ease-out; }
+@keyframes lvl-sheen { to { transform: translateX(100%); } }
+.lvl-bot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.lvl-bot small { color: var(--mut); font-size: 12px; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .lvlbar i { transition: none; } .lvlbar.gain i::after { animation: none; } }

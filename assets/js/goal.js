@@ -1,11 +1,11 @@
 // Waktool — page Objectif : un niveau à atteindre → plan (récolter / planter / crafter), sac suivi en direct, prochaine action
-import { st } from './state.js?v=d32f5467';
-import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=d32f5467';
-import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=d32f5467';
-import { renderTabs } from './main.js?v=d32f5467';
-import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=d32f5467';
-import { growEvent } from './grow.js?v=d32f5467';
-import { flash, initAudio } from './alert.js?v=d32f5467';
+import { st } from './state.js?v=9da49358';
+import { $, changed, esc, fmt, fmtDur, icon, jget, sj, store } from './util.js?v=9da49358';
+import { HARVEST, PLANTABLE, RD, XP, getJob, goalPlan, levelOf, lvlKey, needRecipes, resZones, touchProg, xpOf } from './model.js?v=9da49358';
+import { renderTabs } from './main.js?v=9da49358';
+import { ITEMS, chatCfgChange, chatClick, chatPanelHtml, chatUi } from './chatlog.js?v=9da49358';
+import { growEvent } from './grow.js?v=9da49358';
+import { flash, initAudio } from './alert.js?v=9da49358';
 
 // ================================================================ état : objectif + sac
 const GOAL_DEF = { job: null, plant: true, craft: true, travel: 3, view: 'full', alert: 'edge', wild: 40, cap: 100, grow: 5, growBad: 5, weather: 'ok', allSeeds: true, t: 0 };
@@ -70,6 +70,11 @@ function guide(c) {
 
 // ================================================================ rythme réel (XP / heure sur les 10 dernières minutes)
 const recent = [];
+// XP moyenne par action ces dernières minutes (journal) : pour estimer les actions restantes avant le niveau suivant
+function avgGain(k) {
+  const win = recent.filter(e => e.job === k).slice(-30);
+  return win.length >= 3 ? win.reduce((a, e) => a + e.gain, 0) / win.length : null;
+}
 function rate(k) {
   const now = Date.now(), win = recent.filter(e => e.job === k && now - e.at < 10 * 60000);
   if (win.length < 3) return null;
@@ -160,6 +165,35 @@ function actionText(gd) {
   return { title: '', sub: '' };
 }
 
+// encart « niveau en cours » : barre qui se remplit à chaque gain d'XP (animée depuis la valeur précédente)
+function lvlCardHtml(c) {
+  const need = XP.need(c.L), p = pct(c.x, need), left = Math.max(0, need - c.x), g = avgGain(c.j.key);
+  return `<div class="lvl-card">
+    <div class="lvl-top"><span>Niveau <b>${c.L}</b> <i>→ ${c.L + 1}</i></span><b class="lvl-pct">${Math.floor(p)} %</b></div>
+    <div class="lvlbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.floor(p)}"><i data-lvl="${c.L}" data-p="${p.toFixed(2)}" style="width:${p.toFixed(2)}%"></i></div>
+    <div class="lvl-bot"><small>${fmt(c.x)} / ${fmt(need)} XP</small><small>encore ${fmt(left)} XP${g ? ((n) => ` · ≈ ${fmt(n)} action${n > 1 ? 's' : ''}`)(Math.ceil(left / g)) : ''}</small></div>
+  </div>`;
+}
+let lastLvl = null; // { job, L, p } du dernier rendu
+function animLvl() {
+  const i = $('#g-hero .lvlbar i');
+  if (!i) return;
+  const L = +i.dataset.lvl, p = +i.dataset.p, job = goalJob().key, prev = lastLvl;
+  lastLvl = { job, L, p };
+  if (!prev || prev.job !== job || L < prev.L || (L === prev.L && p <= prev.p)) return; // rien à animer
+  const bump = () => { i.parentElement.classList.remove('gain'); void i.offsetWidth; i.parentElement.classList.add('gain'); };
+  const to = w => requestAnimationFrame(() => requestAnimationFrame(() => { i.style.width = w + '%'; bump(); }));
+  i.style.transition = 'none'; i.style.width = prev.p + '%'; void i.offsetWidth; i.style.transition = '';
+  if (L === prev.L) { to(p); return; }
+  // montée de niveau : la barre se remplit jusqu'au bout, puis repart de zéro
+  to(100);
+  setTimeout(() => {
+    if (!i.isConnected) return;
+    i.style.transition = 'none'; i.style.width = '0%'; void i.offsetWidth; i.style.transition = '';
+    to(p);
+  }, 800);
+}
+
 function heroHtml(c, gd) {
   const j = c.j;
   const lvlIn = `<input type="number" min="0" max="250" data-g="lvl" value="${c.L ?? ''}" placeholder="?" aria-label="Niveau actuel">`;
@@ -179,7 +213,7 @@ function heroHtml(c, gd) {
     <div class="hero-prog-l"><b>${startL}</b><small>départ</small></div>
     <div class="hero-prog-m">${bar(p, 'big')}<small>Niv. <b>${c.L}</b> · ${fmt(c.x)} / ${fmt(XP.need(c.L))} XP · ${Math.floor(p)} %${startL < c.L ? ' <button type="button" class="lnk" data-g="restart" title="Repartir de ton niveau actuel">↺</button>' : ''}</small></div>
     <div class="hero-prog-r"><b>${c.to}</b><small>${c.L >= c.to ? 'atteint' : `${fmt(Math.max(0, xEnd - xNow))} XP restants`}</small></div>
-  </div>`;
+  </div>${lvlCardHtml(c)}`;
   if (gd.kind === 'done') return `<section class="hero done">${head}${prog}<div class="next big-done"><div class="next-txt"><b>Objectif atteint 🎉</b><span>Fixe un nouveau niveau à atteindre.</span></div></div></section>`;
   if (gd.kind === 'loading') return `<section class="hero">${head}${prog}<p class="hero-msg">Chargement des recettes…</p></section>`;
   if (gd.kind === 'blocked') return `<section class="hero">${head}${prog}<p class="hero-msg">Aucune ressource ne donne d’XP à ce niveau.</p></section>`;
@@ -270,6 +304,7 @@ function renderObjectif() {
     <div id="g-bagw">${bagHtml(c)}</div>
     <div id="journal">${chatPanelHtml()}</div>
     ${compact ? '</details>' : ''}`;
+  animLvl();
   if (!prevSig) prevSig = signature(c, gd);
 }
 // mise à jour après le journal : sans casser une saisie en cours
@@ -278,7 +313,7 @@ function refreshObjectif() {
   const a = document.activeElement, typing = a && a.closest('#page-objectif') && a.matches('input, select, textarea');
   if (!typing) { renderObjectif(); return; }
   const c = ctx(), gd = guide(c);
-  if (!a.closest('#g-hero')) $('#g-hero').innerHTML = heroHtml(c, gd);
+  if (!a.closest('#g-hero')) { $('#g-hero').innerHTML = heroHtml(c, gd); animLvl(); }
   $('#g-steps').innerHTML = stepsHtml(c);
   if (!a.closest('#g-bagw')) $('#g-bagw').innerHTML = bagHtml(c);
   if (!a.closest('#journal')) $('#journal').innerHTML = chatPanelHtml();
